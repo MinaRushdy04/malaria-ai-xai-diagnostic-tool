@@ -1,0 +1,33 @@
+{
+  "selected_threshold": 0.28500000000000003,
+  "validation_selected": {
+    "threshold": 0.28500000000000003,
+    "tn": 1241,
+    "fp": 134,
+    "fn": 54,
+    "tp": 1326,
+    "sensitivity": 0.9608695652173913,
+    "specificity": 0.9025454545454545,
+    "precision": 0.9082191780821918,
+    "negative_predictive_value": 0.9583011583011583,
+    "f1": 0.9338028169014084,
+    "accuracy": 0.9317604355716879,
+    "youden_j": 0.8634150197628458
+  },
+  "test_selected": {
+    "threshold": 0.28500000000000003,
+    "tn": 1306,
+    "fp": 106,
+    "fn": 54,
+    "tp": 1291,
+    "sensitivity": 0.9598513011152416,
+    "specificity": 0.9249291784702549,
+    "precision": 0.9241231209735147,
+    "negative_predictive_value": 0.9602941176470589,
+    "f1": 0.9416484318016047,
+    "accuracy": 0.9419659049691694,
+    "youden_j": 0.8847804795854965
+  },
+  "test_auc": 0.982195888665396,
+  "report": "D:\\Projects\\AI in Healtchare\\AI-X-ray-diagnosis-project-xai\\reports\\evaluation\\threshold_rationale.md"
+}

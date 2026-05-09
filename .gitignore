@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+data/
+reports/evaluation/*_cache.npz
+evaluation_run*.log
+streamlit_xai*.log
+streamlit_logs.txt
+logs.txt
+cloudflared
