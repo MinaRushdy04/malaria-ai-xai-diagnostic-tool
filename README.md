@@ -29,6 +29,8 @@ Streamlit dashboard, and committed evaluation reports.
 - Robustness analysis under blur, noise, contrast, exposure, and compression degradation.
 - Error-analysis gallery for false positives and false negatives.
 - Docker and Docker Compose setup for dashboard/API execution.
+- GitHub Actions CI and Makefile targets for repeatable checks.
+- Human-in-the-loop review queue with reviewer feedback storage and CSV export.
 - Script-first utilities for training, threshold evaluation, calibration, robustness, error analysis, and single-image CLI prediction.
 - Automated tests for validation, quality gate, review routing, and API middleware behavior.
 - Committed evaluation artifacts: confusion matrices, ROC curve, threshold sweep, metrics CSV, and markdown report.
@@ -39,12 +41,14 @@ Streamlit dashboard, and committed evaluation reports.
 ```text
 .
 |-- Dockerfile
+|-- Makefile
 |-- MODEL_CARD.md
 |-- README.md
 |-- docker-compose.yml
 |-- docs/
 |   |-- ARCHITECTURE.md
-|   `-- DATASETS.md
+|   |-- DATASETS.md
+|   `-- OPERATIONS.md
 |-- malaria_App/
 |   |-- __init__.py
 |   |-- api.py
@@ -320,6 +324,7 @@ The dashboard has four main views:
 - `Analysis Workbench`: upload a cell image, inspect quality checks, run inference, review Grad-CAM, and view telemetry.
 - `Monitoring`: inspect recent review rate, validation-warning rate, quality-pass rate, and class mix.
 - `Audit Log`: review recent local prediction records with correlation IDs and quality metrics.
+- `Review Queue`: label high-priority cases as correct, incorrect, uncertain, or follow-up.
 - `System Notes`: summarize what the system demonstrates and where its clinical boundaries are.
 
 ## Run With Docker
@@ -381,6 +386,21 @@ curl -X POST http://127.0.0.1:8000/predict \
   -F "file=@sample_cell.png"
 ```
 
+Human review endpoints:
+
+```bash
+curl http://127.0.0.1:8000/review/queue
+curl http://127.0.0.1:8000/review/feedback
+```
+
+Submit reviewer feedback:
+
+```bash
+curl -X POST http://127.0.0.1:8000/review/feedback \
+  -H "Content-Type: application/json" \
+  -d "{\"request_id\":\"REQUEST_ID\",\"reviewer_decision\":\"incorrect\",\"reviewer_notes\":\"near-threshold case\"}"
+```
+
 ## Reproduce Evaluation
 
 From the repository root:
@@ -438,7 +458,18 @@ python -m pytest tests -q
 ```
 
 The current tests cover input validation, image-quality warnings, near-threshold review routing,
-and API correlation-ID middleware.
+API correlation-ID middleware, and reviewer feedback queue behavior.
+
+Repeatable project commands are also available through:
+
+```bash
+make test
+make app
+make api
+make calibration
+make robustness
+make error-gallery
+```
 
 ## Responsible Use
 

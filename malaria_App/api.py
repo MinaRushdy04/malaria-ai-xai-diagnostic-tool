@@ -12,12 +12,16 @@ try:
         load_keras_model,
         model_sha256,
         package_to_api_payload,
+        read_active_learning_queue,
+        read_prediction_by_request_id,
+        read_review_feedback,
         summarize_logs,
         validate_image_bytes,
+        write_review_feedback,
         write_prediction_log,
     )
     from .middleware import CorrelationIdMiddleware
-    from .schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse
+    from .schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse, ReviewFeedbackRequest
 except ImportError:
     from diagnostic_core import (
         DEFAULT_REVIEW_MARGIN,
@@ -28,12 +32,16 @@ except ImportError:
         load_keras_model,
         model_sha256,
         package_to_api_payload,
+        read_active_learning_queue,
+        read_prediction_by_request_id,
+        read_review_feedback,
         summarize_logs,
         validate_image_bytes,
+        write_review_feedback,
         write_prediction_log,
     )
     from middleware import CorrelationIdMiddleware
-    from schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse
+    from schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse, ReviewFeedbackRequest
 
 
 app = FastAPI(
@@ -77,6 +85,28 @@ def health():
 @app.get("/monitoring/summary", response_model=MonitoringSummaryResponse)
 def monitoring_summary(limit: int = 200):
     return summarize_logs(limit=limit)
+
+
+@app.get("/review/queue")
+def review_queue(limit: int = 50):
+    return {"items": read_active_learning_queue(limit=limit)}
+
+
+@app.get("/review/feedback")
+def review_feedback(limit: int = 100):
+    return {"items": read_review_feedback(limit=limit)}
+
+
+@app.post("/review/feedback")
+def create_review_feedback(feedback: ReviewFeedbackRequest):
+    prediction_row = read_prediction_by_request_id(feedback.request_id)
+    if prediction_row is None:
+        raise HTTPException(status_code=404, detail="Prediction request_id not found in local logs.")
+    return write_review_feedback(
+        prediction_row,
+        reviewer_decision=feedback.reviewer_decision,
+        reviewer_notes=feedback.reviewer_notes,
+    )
 
 
 @app.post("/predict", response_model=PredictionApiResponse)

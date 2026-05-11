@@ -15,10 +15,15 @@ try:
         ImageValidationError,
         data_uri_to_image,
         diagnose_image,
+        export_review_feedback_csv,
         load_keras_model,
+        read_active_learning_queue,
         read_recent_logs,
+        read_review_feedback,
+        summarize_review_feedback,
         summarize_logs,
         validate_image_bytes,
+        write_review_feedback,
         write_prediction_log,
     )
     from .middleware import CORRELATION_ID_HEADER
@@ -29,10 +34,15 @@ except ImportError:
         ImageValidationError,
         data_uri_to_image,
         diagnose_image,
+        export_review_feedback_csv,
         load_keras_model,
+        read_active_learning_queue,
         read_recent_logs,
+        read_review_feedback,
+        summarize_review_feedback,
         summarize_logs,
         validate_image_bytes,
+        write_review_feedback,
         write_prediction_log,
     )
     from middleware import CORRELATION_ID_HEADER
@@ -392,6 +402,96 @@ def render_audit_log() -> None:
     st.caption("Logs are local SQLite/CSV records. Raw uploaded images are not stored.")
 
 
+def queue_dataframe(limit: int = 50) -> pd.DataFrame:
+    rows = read_active_learning_queue(limit=limit)
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(
+        [
+            {
+                "time": row.get("timestamp_utc"),
+                "request_id": row.get("request_id"),
+                "correlation": (row.get("correlation_id") or "")[:12],
+                "class": row.get("predicted_class"),
+                "score": round(float(row.get("parasitized_score") or 0.0), 3),
+                "distance": round(float(row.get("decision_margin") or 0.0), 3),
+                "review_reason": row.get("review_reason"),
+                "quality_pass": str(row.get("quality_passed")).lower() in {"1", "true"},
+            }
+            for row in rows
+        ]
+    )
+
+
+def feedback_dataframe(limit: int = 100) -> pd.DataFrame:
+    rows = read_review_feedback(limit=limit)
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows)
+
+
+def render_review_queue() -> None:
+    summary = summarize_review_feedback(limit=500)
+    cols = st.columns(3)
+    cols[0].metric("Reviewed cases", summary["total_reviews"])
+    cols[1].metric("Model disagreement", f"{summary['model_disagreement_rate'] * 100:.1f}%")
+    cols[2].metric("Decision mix", str(summary["decision_counts"]))
+
+    queue_rows = read_active_learning_queue(limit=50)
+    queue_frame = queue_dataframe(limit=50)
+    if queue_frame.empty:
+        st.info("No unreviewed high-priority cases in the local queue yet.")
+    else:
+        st.markdown("#### Active Learning Queue")
+        st.dataframe(queue_frame, width="stretch", hide_index=True)
+
+        labels = [
+            f"{row.get('timestamp_utc')} | {row.get('predicted_class')} | score={float(row.get('parasitized_score') or 0.0):.3f} | {str(row.get('request_id'))[:8]}"
+            for row in queue_rows
+        ]
+        selected_label = st.selectbox("Select case for review", labels)
+        selected_row = queue_rows[labels.index(selected_label)]
+
+        detail_cols = st.columns(4)
+        detail_cols[0].metric("Model class", selected_row.get("predicted_class"))
+        detail_cols[1].metric("Parasitized score", f"{float(selected_row.get('parasitized_score') or 0.0):.3f}")
+        detail_cols[2].metric("Threshold", f"{float(selected_row.get('threshold') or 0.0):.3f}")
+        detail_cols[3].metric("Quality pass", "Yes" if str(selected_row.get("quality_passed")).lower() in {"1", "true"} else "No")
+        st.caption(selected_row.get("review_reason") or "No review reason recorded.")
+
+        with st.form("review_feedback_form"):
+            reviewer_decision = st.radio(
+                "Reviewer decision",
+                ["correct", "incorrect", "uncertain", "needs_follow_up"],
+                horizontal=True,
+            )
+            reviewer_notes = st.text_area(
+                "Reviewer notes",
+                placeholder="Optional notes about morphology, image quality, threshold behavior, or follow-up.",
+            )
+            submitted = st.form_submit_button("Save reviewer feedback")
+            if submitted:
+                status = write_review_feedback(selected_row, reviewer_decision, reviewer_notes)
+                st.success(f"Saved feedback: {status['feedback_id']}")
+                st.rerun()
+
+    st.markdown("#### Feedback Records")
+    feedback_frame = feedback_dataframe(limit=100)
+    if feedback_frame.empty:
+        st.caption("No feedback records yet.")
+    else:
+        st.dataframe(feedback_frame, width="stretch", hide_index=True)
+        export_path = export_review_feedback_csv()
+        st.caption(f"Feedback export written to `{export_path}`.")
+        st.download_button(
+            "Download feedback CSV",
+            data=feedback_frame.to_csv(index=False),
+            file_name="review_feedback_export.csv",
+            mime="text/csv",
+            width="stretch",
+        )
+
+
 def render_system_notes() -> None:
     st.markdown("#### What this dashboard demonstrates")
     st.markdown(
@@ -402,6 +502,7 @@ def render_system_notes() -> None:
         - Configurable threshold and expert-review routing.
         - Grad-CAM explainability and activation-map inspection.
         - Local audit logs with correlation IDs, model hash, and quality metrics.
+        - Human-in-the-loop feedback capture for active-learning review queues.
         """
     )
     st.markdown("#### Boundaries")
@@ -516,8 +617,8 @@ render_header()
 settings = sidebar_settings()
 render_status_strip(settings)
 
-analysis_tab, monitoring_tab, audit_tab, notes_tab = st.tabs(
-    ["Analysis Workbench", "Monitoring", "Audit Log", "System Notes"]
+analysis_tab, monitoring_tab, review_tab, audit_tab, notes_tab = st.tabs(
+    ["Analysis Workbench", "Monitoring", "Review Queue", "Audit Log", "System Notes"]
 )
 
 with analysis_tab:
@@ -612,6 +713,9 @@ with analysis_tab:
 
 with monitoring_tab:
     render_monitoring()
+
+with review_tab:
+    render_review_queue()
 
 with audit_tab:
     render_audit_log()

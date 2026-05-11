@@ -85,3 +85,9 @@ class MonitoringSummaryResponse(BaseModel):
     avg_focus_score: float
     avg_brightness: float
     class_counts: dict[str, int]
+
+
+class ReviewFeedbackRequest(BaseModel):
+    request_id: str
+    reviewer_decision: str
+    reviewer_notes: str = ""

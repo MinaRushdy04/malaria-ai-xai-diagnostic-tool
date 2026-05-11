@@ -25,6 +25,7 @@ MODEL_PATH = APP_DIR / "malaria_cell_parasite_prediction_model.h5"
 LOG_DIR = Path(os.environ.get("MALARIA_LOG_DIR", ROOT_DIR / "logs"))
 SQLITE_LOG_PATH = LOG_DIR / "predictions.sqlite3"
 CSV_LOG_PATH = LOG_DIR / "predictions.csv"
+FEEDBACK_CSV_EXPORT_PATH = LOG_DIR / "review_feedback_export.csv"
 
 MODEL_VERSION = "mobilenetv2-malaria-cell-v1"
 IMG_SIZE = (224, 224)
@@ -587,6 +588,21 @@ LOG_COLUMNS = [
     "gradcam_layer",
 ]
 
+FEEDBACK_COLUMNS = [
+    "timestamp_utc",
+    "feedback_id",
+    "request_id",
+    "correlation_id",
+    "reviewer_decision",
+    "reviewer_notes",
+    "model_predicted_class",
+    "model_parasitized_score",
+    "model_threshold",
+    "review_required",
+    "quality_passed",
+    "content_sha256",
+]
+
 
 def _log_record(package: DiagnosisPackage, source: str) -> dict[str, Any]:
     result = package.result
@@ -634,6 +650,19 @@ def _ensure_sqlite_schema(connection: sqlite3.Connection) -> None:
     for column in LOG_COLUMNS:
         if column not in existing_columns:
             connection.execute(f"ALTER TABLE predictions ADD COLUMN {column} TEXT")
+    connection.commit()
+
+
+def _ensure_feedback_schema(connection: sqlite3.Connection) -> None:
+    columns_sql = ", ".join(f"{column} TEXT" for column in FEEDBACK_COLUMNS)
+    connection.execute(f"CREATE TABLE IF NOT EXISTS review_feedback ({columns_sql})")
+    existing_columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(review_feedback)").fetchall()
+    }
+    for column in FEEDBACK_COLUMNS:
+        if column not in existing_columns:
+            connection.execute(f"ALTER TABLE review_feedback ADD COLUMN {column} TEXT")
     connection.commit()
 
 
@@ -686,6 +715,133 @@ def read_recent_logs(limit: int = 20) -> list[dict[str, Any]]:
             (int(limit),),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def read_prediction_by_request_id(request_id: str) -> dict[str, Any] | None:
+    if not SQLITE_LOG_PATH.exists():
+        return None
+
+    with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_sqlite_schema(connection)
+        row = connection.execute(
+            "SELECT * FROM predictions WHERE request_id = ? ORDER BY timestamp_utc DESC LIMIT 1",
+            (request_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def read_active_learning_queue(limit: int = 50) -> list[dict[str, Any]]:
+    if not SQLITE_LOG_PATH.exists():
+        return []
+
+    with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_sqlite_schema(connection)
+        _ensure_feedback_schema(connection)
+        rows = connection.execute(
+            """
+            SELECT p.*
+            FROM predictions p
+            LEFT JOIN review_feedback f ON p.request_id = f.request_id
+            WHERE f.request_id IS NULL
+              AND (
+                LOWER(COALESCE(p.review_required, '0')) IN ('1', 'true', 'yes')
+                OR LOWER(COALESCE(p.quality_passed, '1')) IN ('0', 'false', 'no')
+                OR COALESCE(p.validation_warnings, '') NOT IN ('', '[]')
+              )
+            ORDER BY p.timestamp_utc DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def write_review_feedback(
+    prediction_row: dict[str, Any],
+    reviewer_decision: str,
+    reviewer_notes: str = "",
+) -> dict[str, Any]:
+    decision = reviewer_decision.strip().lower()
+    allowed_decisions = {"correct", "incorrect", "uncertain", "needs_follow_up"}
+    if decision not in allowed_decisions:
+        raise ValueError(f"reviewer_decision must be one of {sorted(allowed_decisions)}")
+
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    record = {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "feedback_id": str(uuid.uuid4()),
+        "request_id": prediction_row.get("request_id"),
+        "correlation_id": prediction_row.get("correlation_id"),
+        "reviewer_decision": decision,
+        "reviewer_notes": reviewer_notes.strip(),
+        "model_predicted_class": prediction_row.get("predicted_class"),
+        "model_parasitized_score": prediction_row.get("parasitized_score"),
+        "model_threshold": prediction_row.get("threshold"),
+        "review_required": prediction_row.get("review_required"),
+        "quality_passed": prediction_row.get("quality_passed"),
+        "content_sha256": prediction_row.get("content_sha256"),
+    }
+
+    with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+        _ensure_feedback_schema(connection)
+        placeholders = ", ".join("?" for _ in FEEDBACK_COLUMNS)
+        connection.execute(
+            f"INSERT INTO review_feedback ({', '.join(FEEDBACK_COLUMNS)}) VALUES ({placeholders})",
+            [str(record.get(column, "")) for column in FEEDBACK_COLUMNS],
+        )
+        connection.commit()
+
+    return {"status": "ok", "feedback_id": record["feedback_id"], "sqlite_path": str(SQLITE_LOG_PATH)}
+
+
+def read_review_feedback(limit: int = 100) -> list[dict[str, Any]]:
+    if not SQLITE_LOG_PATH.exists():
+        return []
+
+    with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_feedback_schema(connection)
+        rows = connection.execute(
+            "SELECT * FROM review_feedback ORDER BY timestamp_utc DESC LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def export_review_feedback_csv(output_path: Path = FEEDBACK_CSV_EXPORT_PATH) -> str:
+    rows = read_review_feedback(limit=100_000)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as output_file:
+        writer = csv.DictWriter(output_file, fieldnames=FEEDBACK_COLUMNS)
+        writer.writeheader()
+        writer.writerows([{column: row.get(column, "") for column in FEEDBACK_COLUMNS} for row in rows])
+    return str(output_path)
+
+
+def summarize_review_feedback(limit: int = 500) -> dict[str, Any]:
+    rows = read_review_feedback(limit=limit)
+    if not rows:
+        return {
+            "total_reviews": 0,
+            "decision_counts": {},
+            "model_disagreement_rate": 0.0,
+        }
+
+    decision_counts: dict[str, int] = {}
+    disagreement_count = 0
+    for row in rows:
+        decision = str(row.get("reviewer_decision") or "unknown")
+        decision_counts[decision] = decision_counts.get(decision, 0) + 1
+        if decision == "incorrect":
+            disagreement_count += 1
+
+    return {
+        "total_reviews": len(rows),
+        "decision_counts": decision_counts,
+        "model_disagreement_rate": disagreement_count / len(rows),
+    }
 
 
 def summarize_logs(limit: int = 200) -> dict[str, Any]:
