@@ -1,16 +1,24 @@
 services:
-  dashboard:
-    build: .
-    command: streamlit run malaria_App/app.py --server.address=0.0.0.0 --server.port=8501
-    ports:
-      - "8501:8501"
-    volumes:
-      - ./logs:/app/logs
-
   api:
     build: .
     command: uvicorn malaria_App.api:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  streamlit:
+    profiles:
+      - research-ui
+    build: .
+    command: streamlit run malaria_App/app.py --server.address=0.0.0.0 --server.port=8501
+    ports:
+      - "8501:8501"
     volumes:
       - ./logs:/app/logs

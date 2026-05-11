@@ -17,6 +17,6 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . .
 
-EXPOSE 8501 8000
+EXPOSE 8000 8501
 
-CMD ["streamlit", "run", "malaria_App/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["uvicorn", "malaria_App.api:app", "--host", "0.0.0.0", "--port", "8000"]

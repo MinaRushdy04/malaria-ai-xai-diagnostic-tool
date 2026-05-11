@@ -11,13 +11,14 @@ accuracy as the only measure of success.
 
 The notebook is kept as supporting experimental history under `notebooks/`. The main project
 workflow is implemented through Python modules, CLI scripts, tests, a FastAPI service, a
-Streamlit dashboard, and committed evaluation reports.
+FastAPI-served web dashboard, an optional Streamlit research UI, and committed evaluation reports.
 
 ## Project Highlights
 
 - Transfer-learning classifier built with TensorFlow/Keras and MobileNetV2.
-- Streamlit dashboard with local-model mode and FastAPI-service mode.
-- FastAPI inference layer with `/health` and `/predict` endpoints.
+- FastAPI inference layer with `/health`, `/predict`, monitoring, and review endpoints.
+- FastAPI-served browser dashboard at `/dashboard/` for a cleaner deployment path.
+- Optional Streamlit research dashboard with local-model mode and FastAPI-service mode.
 - Grad-CAM overlay for model attention, plus optional activation-map debug view.
 - Validation-based threshold rationale for the `Parasitized` class.
 - Flexible expert-review routing for near-threshold, validation-warning, or quality-warning cases.
@@ -49,7 +50,9 @@ Streamlit dashboard, and committed evaluation reports.
 |-- docs/
 |   |-- ARCHITECTURE.md
 |   |-- DATASETS.md
-|   `-- OPERATIONS.md
+|   |-- DEPLOYMENT.md
+|   |-- OPERATIONS.md
+|   `-- PORTFOLIO_BRIEF.md
 |-- malaria_App/
 |   |-- __init__.py
 |   |-- api.py
@@ -58,6 +61,7 @@ Streamlit dashboard, and committed evaluation reports.
 |   |-- deploy_cloudflare.py
 |   |-- middleware.py
 |   |-- schemas.py
+|   |-- static_dashboard/
 |   `-- malaria_cell_parasite_prediction_model.h5
 |-- reports/
 |   |-- calibration/
@@ -120,12 +124,18 @@ malaria_App/malaria_cell_parasite_prediction_model.h5
 
 ## System Design
 
-The project has two inference paths that share the same core logic:
+The project has three user-facing paths that share the same core logic:
 
 ```text
-Streamlit UI
+FastAPI Web Dashboard
+    `-- /dashboard/ --> browser fetch --> FastAPI /predict
+
+External Clients
+    `-- REST calls --> FastAPI /predict
+
+Optional Streamlit Research UI
     |-- Local model mode --> diagnostic_core.py --> TensorFlow model
-    `-- API mode ---------> FastAPI /predict --> diagnostic_core.py --> TensorFlow model
+    `-- API mode ---------> FastAPI /predict
 ```
 
 Shared behavior lives in `malaria_App/diagnostic_core.py`, including:
@@ -141,12 +151,14 @@ Shared behavior lives in `malaria_App/diagnostic_core.py`, including:
 - Prediction logging
 - Monitoring summaries
 
-This keeps the UI and API consistent: the same image should receive the same validation,
-threshold policy, review decision, and logging structure in both modes.
+This keeps the UI, API, CLI, and optional research dashboard consistent: the same image should
+receive the same validation, threshold policy, review decision, and logging structure across
+entry points.
 
 See [Architecture](docs/ARCHITECTURE.md) for the module-level structure.
 See [Dataset Scope](docs/DATASETS.md) for why this repo focuses on cropped-cell robustness
 instead of overclaiming full-slide parasitemia.
+See [Deployment](docs/DEPLOYMENT.md) for the API-first deployment path.
 
 ## Input Validation
 
@@ -317,26 +329,41 @@ Robustness subset summary:
 The noise result is intentionally documented as a remaining weakness: the current quality gate
 catches blur, low contrast, and underexposure more clearly than synthetic high-frequency noise.
 
-## Run The Streamlit Dashboard
+## Run The FastAPI Web Dashboard
 
 From the repository root:
 
 ```bash
 pip install -r requirements.txt
-streamlit run malaria_App/app.py
+uvicorn malaria_App.api:app --reload
 ```
 
-The sidebar lets you choose:
+Then open:
 
-- Local model inference
-- FastAPI service inference
+```text
+http://127.0.0.1:8000/dashboard/
+```
+
+The browser dashboard uses the same deployed API that external clients use. It supports:
+
 - Parasitized threshold
 - Expert-review band
 - Whether validation warnings should trigger review
-- Whether Grad-CAM and activation maps should run
+- Whether Grad-CAM should run
 - Whether predictions should be logged
+- Reviewer feedback capture
+- Monitoring and active review queue refresh
 
-The dashboard has four main views:
+## Optional Streamlit Research UI
+
+Streamlit is kept as a local research and inspection interface. It is not the primary deployment
+surface.
+
+```bash
+streamlit run malaria_App/app.py
+```
+
+The Streamlit research UI has five main views:
 
 - `Analysis Workbench`: upload a cell image, inspect quality checks, run inference, review Grad-CAM, and view telemetry.
 - `Monitoring`: inspect recent review rate, validation-warning rate, quality-pass rate, and class mix.
@@ -346,14 +373,20 @@ The dashboard has four main views:
 
 ## Run With Docker
 
-Build and run the Streamlit dashboard:
+Build and run the API-first web deployment:
 
 ```bash
 docker build -t malaria-ai-xai .
-docker run --rm -p 8501:8501 -v "%cd%/logs:/app/logs" malaria-ai-xai
+docker run --rm -p 8000:8000 -v "%cd%/logs:/app/logs" malaria-ai-xai
 ```
 
-Run both the dashboard and FastAPI service:
+Then open:
+
+```text
+http://127.0.0.1:8000/dashboard/
+```
+
+Run the API-first deployment through Compose:
 
 ```bash
 docker compose up --build
@@ -361,8 +394,18 @@ docker compose up --build
 
 Then open:
 
-- Dashboard: `http://127.0.0.1:8501`
+- Web dashboard: `http://127.0.0.1:8000/dashboard/`
 - FastAPI docs: `http://127.0.0.1:8000/docs`
+
+Run the optional Streamlit research UI:
+
+```bash
+docker compose --profile research-ui up --build
+```
+
+Then open:
+
+- Streamlit research UI: `http://127.0.0.1:8501`
 
 ## Run The FastAPI Service
 
@@ -487,12 +530,15 @@ Repeatable project commands are also available through:
 
 ```bash
 make test
+make web
 make app
 make api
 make calibration
 make confidence-intervals
 make robustness
 make error-gallery
+make docker-up
+make docker-streamlit
 ```
 
 ## Responsible Use
@@ -506,8 +552,8 @@ medical data.
 
 ## Future Work
 
-- Add PR-AUC and confidence intervals for core metrics.
+- Add a React or Next.js frontend if the static FastAPI dashboard grows into a larger review product.
+- Add field-of-view cell detection and parasitemia-style aggregation using a bounding-box dataset.
 - Add Grad-CAM examples for true positives, true negatives, false positives, and false negatives.
-- Add authenticated reviewer feedback capture for human-in-the-loop case review.
 - Improve image-quality heuristics for noise and compression artifacts.
 - Evaluate on an external dataset or institutionally separate holdout set.

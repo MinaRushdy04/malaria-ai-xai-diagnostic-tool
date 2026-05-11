@@ -13,16 +13,18 @@ The `test` target compiles the application, API, scripts, and tests, then runs t
 
 ## Run Locally
 
-Dashboard:
+API-first web dashboard:
+
+```bash
+make web
+```
+
+Open `http://127.0.0.1:8000/dashboard/`.
+
+Optional Streamlit research UI:
 
 ```bash
 make app
-```
-
-FastAPI service:
-
-```bash
-make api
 ```
 
 ## Analysis Reports
@@ -59,10 +61,16 @@ Build the image:
 make docker-build
 ```
 
-Run dashboard and API:
+Run the API-first web deployment:
 
 ```bash
 make docker-up
+```
+
+Run the optional Streamlit research UI:
+
+```bash
+make docker-streamlit
 ```
 
 ## Continuous Integration

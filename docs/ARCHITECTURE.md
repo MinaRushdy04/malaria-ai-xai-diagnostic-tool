@@ -7,7 +7,14 @@ but the main project behavior lives in Python modules, scripts, tests, reports, 
 ## Runtime Layers
 
 ```text
-Streamlit Dashboard
+FastAPI Web Dashboard
+    |-- served at /dashboard/
+    |-- uploads files to /predict
+    |-- reads monitoring summary
+    |-- reads active review queue
+    `-- submits reviewer feedback
+
+Optional Streamlit Research UI
     |-- Analysis Workbench
     |-- Monitoring
     |-- Review Queue
@@ -39,8 +46,9 @@ Shared Diagnostic Core
 ## Key Files
 
 - `malaria_App/diagnostic_core.py`: shared inference, XAI, validation, logging, and monitoring logic.
-- `malaria_App/app.py`: Streamlit dashboard for demos and human-facing inspection.
-- `malaria_App/api.py`: FastAPI service for backend-style inference.
+- `malaria_App/api.py`: FastAPI service for inference, monitoring, review endpoints, and the static web dashboard.
+- `malaria_App/static_dashboard/`: lightweight browser dashboard served by FastAPI.
+- `malaria_App/app.py`: optional Streamlit research UI for demos and local inspection.
 - `malaria_App/middleware.py`: correlation ID and request timing middleware.
 - `malaria_App/schemas.py`: typed FastAPI response schemas.
 - `Makefile`: repeatable local commands for checks, reports, and services.
@@ -57,6 +65,10 @@ Shared Diagnostic Core
 The model is treated as one component inside a decision-support workflow. The surrounding system
 handles input validation, quality warnings, configurable review routing, explainability, logs,
 human feedback, and monitoring summaries so the output is easier to inspect and reason about.
+
+The deployed path is API-first. The browser dashboard is a thin client over FastAPI endpoints,
+which makes the project easier to containerize, document, test, and replace with a larger frontend
+later. Streamlit remains useful for exploration, but it is not the only interface.
 
 ## Human-In-The-Loop Review
 

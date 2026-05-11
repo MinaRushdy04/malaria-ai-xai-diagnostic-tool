@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 try:
     from .diagnostic_core import (
@@ -54,9 +58,16 @@ app = FastAPI(
 )
 app.add_middleware(CorrelationIdMiddleware)
 
+STATIC_DASHBOARD_DIR = Path(__file__).resolve().parent / "static_dashboard"
+
 
 _MODEL = None
 _MODEL_ERROR = None
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/dashboard/")
 
 
 def get_model():
@@ -144,3 +155,11 @@ async def predict(
         write_prediction_log(package, source="fastapi") if enable_logging else {"enabled": False}
     )
     return payload
+
+
+if STATIC_DASHBOARD_DIR.exists():
+    app.mount(
+        "/dashboard",
+        StaticFiles(directory=STATIC_DASHBOARD_DIR, html=True),
+        name="dashboard",
+    )

@@ -19,7 +19,7 @@ It may be used to:
 - Demonstrate Grad-CAM as an explainability method
 - Discuss risks of using model confidence as clinical certainty
 - Discuss why healthcare AI evaluation needs sensitivity, specificity, calibration, and failure analysis
-- Demonstrate how an inference model can be wrapped with validation, review routing, and logging
+- Demonstrate how an inference model can be wrapped with validation, review routing, logging, and an API-first deployment surface
 
 ## Out-of-Scope Use
 
@@ -71,6 +71,7 @@ reviewed alongside prediction errors and confidence calibration.
 - Validation warnings can also trigger review routing.
 - Predictions can be logged to local SQLite and CSV files without storing the raw uploaded image.
 - Correlation IDs, model version, model hash, and request timing make API predictions easier to trace.
+- A FastAPI-served browser dashboard demonstrates deployment without depending on Streamlit as the only interface.
 
 ## Recommended Evaluation Before Any Serious Use
 

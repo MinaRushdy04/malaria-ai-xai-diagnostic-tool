@@ -18,6 +18,7 @@ from malaria_App.diagnostic_core import (
     validate_image_bytes,
 )
 import malaria_App.diagnostic_core as core
+from malaria_App.api import app as api_app
 from malaria_App.middleware import CORRELATION_ID_HEADER, CorrelationIdMiddleware
 
 
@@ -72,6 +73,18 @@ def test_middleware_preserves_correlation_id_header():
     assert response.status_code == 200
     assert response.headers[CORRELATION_ID_HEADER] == "case-123"
     assert "X-Process-Time-Ms" in response.headers
+
+
+def test_api_serves_dashboard_entrypoint():
+    client = TestClient(api_app)
+
+    root_response = client.get("/", follow_redirects=False)
+    assert root_response.status_code in {307, 308}
+    assert root_response.headers["location"] == "/dashboard/"
+
+    dashboard_response = client.get("/dashboard/")
+    assert dashboard_response.status_code == 200
+    assert "Clinical Review Workbench" in dashboard_response.text
 
 
 def test_review_feedback_removes_case_from_active_queue(tmp_path, monkeypatch):
