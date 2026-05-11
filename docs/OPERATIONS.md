@@ -33,6 +33,12 @@ Calibration:
 make calibration
 ```
 
+Confidence intervals:
+
+```bash
+make confidence-intervals
+```
+
 Robustness:
 
 ```bash

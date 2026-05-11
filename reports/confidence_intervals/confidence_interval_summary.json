@@ -1,0 +1,69 @@
+{
+  "threshold": 0.285,
+  "n_bootstrap": 2000,
+  "seed": 42,
+  "point_metrics": {
+    "accuracy": 0.9419659049691694,
+    "sensitivity": 0.9598513011152416,
+    "specificity": 0.9249291784702549,
+    "precision": 0.9241231209735147,
+    "f1": 0.9416484318016046,
+    "roc_auc": 0.982195888665396,
+    "pr_auc": 0.9804612915479497,
+    "tn": 1306.0,
+    "fp": 106.0,
+    "fn": 54.0,
+    "tp": 1291.0
+  },
+  "intervals": [
+    {
+      "metric": "accuracy",
+      "point_estimate": 0.9419659049691694,
+      "ci_lower_95": 0.9336235038084875,
+      "ci_upper_95": 0.9506710192237939,
+      "bootstrap_std": 0.00439200905955555
+    },
+    {
+      "metric": "sensitivity",
+      "point_estimate": 0.9598513011152416,
+      "ci_lower_95": 0.9494423791821561,
+      "ci_upper_95": 0.9695167286245353,
+      "bootstrap_std": 0.005286241157793781
+    },
+    {
+      "metric": "specificity",
+      "point_estimate": 0.9249291784702549,
+      "ci_lower_95": 0.9107648725212465,
+      "ci_upper_95": 0.9383852691218131,
+      "bootstrap_std": 0.006936930489669383
+    },
+    {
+      "metric": "precision",
+      "point_estimate": 0.9241231209735147,
+      "ci_lower_95": 0.9113470810187612,
+      "ci_upper_95": 0.9370944118089601,
+      "bootstrap_std": 0.006493111096664853
+    },
+    {
+      "metric": "f1",
+      "point_estimate": 0.9416484318016046,
+      "ci_lower_95": 0.9334298118668596,
+      "ci_upper_95": 0.9500569832246946,
+      "bootstrap_std": 0.004343710915535744
+    },
+    {
+      "metric": "roc_auc",
+      "point_estimate": 0.982195888665396,
+      "ci_lower_95": 0.9775861113451352,
+      "ci_upper_95": 0.986471218551555,
+      "bootstrap_std": 0.002224198047831113
+    },
+    {
+      "metric": "pr_auc",
+      "point_estimate": 0.9804612915479497,
+      "ci_lower_95": 0.9727377262835353,
+      "ci_upper_95": 0.9864220192039459,
+      "bootstrap_std": 0.0034686535982415274
+    }
+  ]
+}

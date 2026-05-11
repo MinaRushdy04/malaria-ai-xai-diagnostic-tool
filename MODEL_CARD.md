@@ -78,6 +78,7 @@ reviewed alongside prediction errors and confidence calibration.
 - Sensitivity and specificity
 - ROC-AUC and PR-AUC
 - Calibration curve and Brier score
+- Bootstrap confidence intervals for reported metrics
 - Threshold analysis
 - False-positive and false-negative review
 - Synthetic robustness stress testing

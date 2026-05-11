@@ -31,6 +31,7 @@ jobs:
       - name: Smoke-check CLI entry points
         run: |
           python scripts/calibration_analysis.py --help
+          python scripts/confidence_intervals.py --help
           python scripts/robustness_analysis.py --help
           python scripts/error_analysis.py --help
           python scripts/predict_image.py --help

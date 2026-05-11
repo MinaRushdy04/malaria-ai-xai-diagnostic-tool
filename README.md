@@ -26,6 +26,7 @@ Streamlit dashboard, and committed evaluation reports.
 - Correlation IDs, model version/hash logging, and request timing headers for API traceability.
 - Lightweight monitoring summary for review rate, validation warnings, quality pass rate, and class mix.
 - Calibration analysis with Brier score, expected calibration error, reliability curve, and score histogram.
+- Bootstrap confidence intervals for threshold metrics, ROC-AUC, and PR-AUC.
 - Robustness analysis under blur, noise, contrast, exposure, and compression degradation.
 - Error-analysis gallery for false positives and false negatives.
 - Docker and Docker Compose setup for dashboard/API execution.
@@ -62,12 +63,14 @@ Streamlit dashboard, and committed evaluation reports.
 |   |-- calibration/
 |   |-- error_analysis/
 |   |-- evaluation/
+|   |-- confidence_intervals/
 |   `-- robustness/
 |-- requirements.txt
 |-- notebooks/
 |   `-- 01_model_exploration.ipynb
 |-- scripts/
 |   |-- calibration_analysis.py
+|   |-- confidence_intervals.py
 |   |-- error_analysis.py
 |   |-- evaluate_threshold.py
 |   |-- predict_image.py
@@ -279,6 +282,8 @@ Additional analysis artifacts:
 
 - [Calibration report](reports/calibration/calibration_report.md)
 - [Reliability curve](reports/calibration/reliability_curve.png)
+- [Confidence interval report](reports/confidence_intervals/confidence_interval_report.md)
+- [Confidence interval plot](reports/confidence_intervals/metric_confidence_intervals.png)
 - [Robustness report](reports/robustness/robustness_report.md)
 - [Robustness performance plot](reports/robustness/performance_by_corruption.png)
 - [Error analysis gallery](reports/error_analysis/error_gallery.md)
@@ -288,6 +293,18 @@ Calibration summary on the test predictions:
 - Brier score: `0.0460`
 - Expected calibration error: `0.0266`
 - Maximum calibration error: `0.2119`
+
+95% bootstrap confidence intervals on the test predictions:
+
+| Metric | Point estimate | 95% CI |
+|---|---:|---:|
+| Accuracy | 0.942 | 0.934-0.951 |
+| Sensitivity | 0.960 | 0.949-0.970 |
+| Specificity | 0.925 | 0.911-0.938 |
+| Precision | 0.924 | 0.911-0.937 |
+| F1 | 0.942 | 0.933-0.950 |
+| ROC-AUC | 0.982 | 0.978-0.986 |
+| PR-AUC | 0.980 | 0.973-0.986 |
 
 Robustness subset summary:
 
@@ -439,6 +456,12 @@ Generate calibration artifacts:
 python scripts/calibration_analysis.py
 ```
 
+Generate bootstrap confidence intervals:
+
+```bash
+python scripts/confidence_intervals.py
+```
+
 Generate robustness artifacts from a deterministic test subset:
 
 ```bash
@@ -467,6 +490,7 @@ make test
 make app
 make api
 make calibration
+make confidence-intervals
 make robustness
 make error-gallery
 ```

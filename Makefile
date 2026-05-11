@@ -1,4 +1,4 @@
-.PHONY: install test compile app api calibration robustness error-gallery docker-build docker-up
+.PHONY: install test compile app api calibration confidence-intervals robustness error-gallery docker-build docker-up
 
 install:
 	python -m pip install --upgrade pip
@@ -18,6 +18,9 @@ api:
 
 calibration:
 	python scripts/calibration_analysis.py
+
+confidence-intervals:
+	python scripts/confidence_intervals.py
 
 robustness:
 	python scripts/robustness_analysis.py --max-samples 300
