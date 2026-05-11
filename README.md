@@ -9,6 +9,10 @@ This is not a production medical device. It is a research and education prototyp
 show how an AI model can be wrapped in safer decision-support behavior instead of presenting
 accuracy as the only measure of success.
 
+The notebook is kept as supporting experimental history under `notebooks/`. The main project
+workflow is implemented through Python modules, CLI scripts, tests, a FastAPI service, a
+Streamlit dashboard, and committed evaluation reports.
+
 ## Project Highlights
 
 - Transfer-learning classifier built with TensorFlow/Keras and MobileNetV2.
@@ -21,6 +25,12 @@ accuracy as the only measure of success.
 - Prediction logging to SQLite and CSV for audit-style reflection.
 - Correlation IDs, model version/hash logging, and request timing headers for API traceability.
 - Lightweight monitoring summary for review rate, validation warnings, quality pass rate, and class mix.
+- Calibration analysis with Brier score, expected calibration error, reliability curve, and score histogram.
+- Robustness analysis under blur, noise, contrast, exposure, and compression degradation.
+- Error-analysis gallery for false positives and false negatives.
+- Docker and Docker Compose setup for dashboard/API execution.
+- Script-first utilities for training, threshold evaluation, calibration, robustness, error analysis, and single-image CLI prediction.
+- Automated tests for validation, quality gate, review routing, and API middleware behavior.
 - Committed evaluation artifacts: confusion matrices, ROC curve, threshold sweep, metrics CSV, and markdown report.
 - Model card documenting intended use, limitations, and responsible-use boundaries.
 
@@ -28,9 +38,13 @@ accuracy as the only measure of success.
 
 ```text
 .
-|-- Diagnosis_model.ipynb
+|-- Dockerfile
 |-- MODEL_CARD.md
 |-- README.md
+|-- docker-compose.yml
+|-- docs/
+|   |-- ARCHITECTURE.md
+|   `-- DATASETS.md
 |-- malaria_App/
 |   |-- __init__.py
 |   |-- api.py
@@ -41,19 +55,22 @@ accuracy as the only measure of success.
 |   |-- schemas.py
 |   `-- malaria_cell_parasite_prediction_model.h5
 |-- reports/
-|   `-- evaluation/
-|       |-- confusion_matrix_default_threshold.png
-|       |-- confusion_matrix_selected_threshold.png
-|       |-- evaluation_summary.json
-|       |-- metrics_summary.csv
-|       |-- roc_curve.png
-|       |-- threshold_rationale.md
-|       `-- threshold_sweep.png
+|   |-- calibration/
+|   |-- error_analysis/
+|   |-- evaluation/
+|   `-- robustness/
 |-- requirements.txt
+|-- notebooks/
+|   `-- 01_model_exploration.ipynb
+|-- scripts/
+|   |-- calibration_analysis.py
+|   |-- error_analysis.py
+|   |-- evaluate_threshold.py
+|   |-- predict_image.py
+|   |-- robustness_analysis.py
+|   `-- train_model.py
 |-- tests/
 |   `-- test_core_safety.py
-`-- scripts/
-    `-- evaluate_threshold.py
 ```
 
 Runtime logs are written under `logs/`, which is ignored by Git.
@@ -119,6 +136,10 @@ Shared behavior lives in `malaria_App/diagnostic_core.py`, including:
 
 This keeps the UI and API consistent: the same image should receive the same validation,
 threshold policy, review decision, and logging structure in both modes.
+
+See [Architecture](docs/ARCHITECTURE.md) for the module-level structure.
+See [Dataset Scope](docs/DATASETS.md) for why this repo focuses on cropped-cell robustness
+instead of overclaiming full-slide parasitemia.
 
 ## Input Validation
 
@@ -250,6 +271,31 @@ Evaluation artifacts:
 - [ROC curve](reports/evaluation/roc_curve.png)
 - [Metrics summary CSV](reports/evaluation/metrics_summary.csv)
 
+Additional analysis artifacts:
+
+- [Calibration report](reports/calibration/calibration_report.md)
+- [Reliability curve](reports/calibration/reliability_curve.png)
+- [Robustness report](reports/robustness/robustness_report.md)
+- [Robustness performance plot](reports/robustness/performance_by_corruption.png)
+- [Error analysis gallery](reports/error_analysis/error_gallery.md)
+
+Calibration summary on the test predictions:
+
+- Brier score: `0.0460`
+- Expected calibration error: `0.0266`
+- Maximum calibration error: `0.2119`
+
+Robustness subset summary:
+
+- Clean sampled accuracy: `0.950`
+- Gaussian blur accuracy: `0.633`, review-routing rate: `1.000`
+- Low contrast accuracy: `0.900`, review-routing rate: `1.000`
+- Underexposure accuracy: `0.917`, review-routing rate: `1.000`
+- Gaussian noise accuracy: `0.833`, sensitivity dropped to `0.700`
+
+The noise result is intentionally documented as a remaining weakness: the current quality gate
+catches blur, low contrast, and underexposure more clearly than synthetic high-frequency noise.
+
 ## Run The Streamlit Dashboard
 
 From the repository root:
@@ -275,6 +321,26 @@ The dashboard has four main views:
 - `Monitoring`: inspect recent review rate, validation-warning rate, quality-pass rate, and class mix.
 - `Audit Log`: review recent local prediction records with correlation IDs and quality metrics.
 - `System Notes`: summarize what the system demonstrates and where its clinical boundaries are.
+
+## Run With Docker
+
+Build and run the Streamlit dashboard:
+
+```bash
+docker build -t malaria-ai-xai .
+docker run --rm -p 8501:8501 -v "%cd%/logs:/app/logs" malaria-ai-xai
+```
+
+Run both the dashboard and FastAPI service:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+- Dashboard: `http://127.0.0.1:8501`
+- FastAPI docs: `http://127.0.0.1:8000/docs`
 
 ## Run The FastAPI Service
 
@@ -326,6 +392,45 @@ python scripts/evaluate_threshold.py
 The script downloads the dataset ZIP if needed, caches predictions in ignored local files, and
 regenerates the evaluation report and figures under `reports/evaluation/`.
 
+## Script-First Workflows
+
+Train a new MobileNetV2 classifier from the public dataset:
+
+```bash
+python scripts/train_model.py --epochs 5 --batch-size 32
+```
+
+The training script downloads and extracts the dataset if needed, then saves the best model under
+`models/`, which is ignored by Git. The committed app model remains at
+`malaria_App/malaria_cell_parasite_prediction_model.h5`.
+
+Run a single-image prediction from the command line:
+
+```bash
+python scripts/predict_image.py path/to/cell.png --threshold 0.285 --review-margin 0.075 --log
+```
+
+The CLI uses the same validation, quality scoring, thresholding, review routing, and logging
+logic as the dashboard and API.
+
+Generate calibration artifacts:
+
+```bash
+python scripts/calibration_analysis.py
+```
+
+Generate robustness artifacts from a deterministic test subset:
+
+```bash
+python scripts/robustness_analysis.py --max-samples 300
+```
+
+Generate false-positive and false-negative gallery items:
+
+```bash
+python scripts/error_analysis.py --limit-per-type 12
+```
+
 ## Run Tests
 
 ```bash
@@ -346,10 +451,8 @@ medical data.
 
 ## Future Work
 
-- Add false-positive and false-negative case galleries.
-- Add calibration curve, Brier score, and expected calibration error.
 - Add PR-AUC and confidence intervals for core metrics.
 - Add Grad-CAM examples for true positives, true negatives, false positives, and false negatives.
-- Add Docker support for a repeatable local deployment.
 - Add authenticated reviewer feedback capture for human-in-the-loop case review.
+- Improve image-quality heuristics for noise and compression artifacts.
 - Evaluate on an external dataset or institutionally separate holdout set.

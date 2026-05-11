@@ -60,6 +60,8 @@ reviewed alongside prediction errors and confidence calibration.
 - The image-quality gate uses simple brightness, contrast, and focus heuristics; it is not a replacement
   for clinical specimen-quality review.
 - Monitoring summaries are local observability signals, not validated drift-detection infrastructure.
+- Robustness testing shows synthetic noise can reduce sensitivity more than the current quality
+  gate detects, so noise-specific quality checks remain future work.
 
 ## Runtime Safeguards
 
@@ -78,4 +80,5 @@ reviewed alongside prediction errors and confidence calibration.
 - Calibration curve and Brier score
 - Threshold analysis
 - False-positive and false-negative review
+- Synthetic robustness stress testing
 - Grad-CAM review across correct and incorrect predictions

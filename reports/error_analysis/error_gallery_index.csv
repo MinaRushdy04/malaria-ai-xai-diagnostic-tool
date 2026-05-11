@@ -1,0 +1,17 @@
+error_type,true_label_positive_parasitized,parasitized_score,raw_uninfected_sigmoid,member,exported_image
+false_negative,1,0.27872676,0.72127324,cell_images/Parasitized/C132P93ThinF_IMG_20151004_151701_cell_155.png,images\false_negative_00.png
+false_negative,1,0.26972502,0.730275,cell_images/Parasitized/C182P143NThinF_IMG_20151201_172216_cell_169.png,images\false_negative_01.png
+false_negative,1,0.26536798,0.734632,cell_images/Parasitized/C173P134NThinF_IMG_20151130_115733_cell_227.png,images\false_negative_02.png
+false_negative,1,0.2612878,0.7387122,cell_images/Parasitized/C33P1thinF_IMG_20150619_121229a_cell_178.png,images\false_negative_03.png
+false_negative,1,0.25399566,0.74600434,cell_images/Parasitized/C96P57ThinF_IMG_20150824_111748_cell_215.png,images\false_negative_04.png
+false_negative,1,0.2538172,0.7461828,cell_images/Parasitized/C68P29N_ThinF_IMG_20150819_134326_cell_114.png,images\false_negative_05.png
+false_negative,1,0.24586552,0.7541345,cell_images/Parasitized/C68P29N_ThinF_IMG_20150819_134504_cell_132.png,images\false_negative_06.png
+false_negative,1,0.24301845,0.75698155,cell_images/Parasitized/C48P9thinF_IMG_20150721_161243_cell_153.png,images\false_negative_07.png
+false_positive,0,0.99999464,5.335168e-06,cell_images/Uninfected/C132P93ThinF_IMG_20151004_152353_cell_7.png,images\false_positive_08.png
+false_positive,0,0.99972266,0.0002773627,cell_images/Uninfected/C103P64ThinF_IMG_20150918_164250_cell_85.png,images\false_positive_09.png
+false_positive,0,0.996034,0.0039659603,cell_images/Uninfected/C173P134NThinF_IMG_20151130_125408_cell_161.png,images\false_positive_10.png
+false_positive,0,0.9900186,0.009981403,cell_images/Uninfected/C115P76ThinF_IMG_20150930_163018_cell_147.png,images\false_positive_11.png
+false_positive,0,0.9840665,0.015933486,cell_images/Uninfected/C38P3thinF_original_IMG_20150621_112116_cell_60.png,images\false_positive_12.png
+false_positive,0,0.9690141,0.030985918,cell_images/Uninfected/C174P135NThinF_IMG_20151127_135512_cell_128.png,images\false_positive_13.png
+false_positive,0,0.9664177,0.033582333,cell_images/Uninfected/C66P27N_ThinF_IMG_20150818_163419_cell_189.png,images\false_positive_14.png
+false_positive,0,0.96067953,0.03932046,cell_images/Uninfected/C169P130ThinF_IMG_20151118_172913_cell_7.png,images\false_positive_15.png

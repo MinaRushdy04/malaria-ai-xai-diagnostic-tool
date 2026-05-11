@@ -1,0 +1,9 @@
+[project]
+name = "malaria-ai-xai-diagnostic-tool"
+version = "0.1.0"
+description = "Academic malaria cell-smear AI prototype with XAI, thresholding, validation, review routing, API, dashboard, and audit logging."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

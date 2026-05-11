@@ -1,6 +1,8 @@
+.git
 __pycache__/
 *.py[cod]
 data/
+logs/
 models/
 reports/evaluation/*_cache.npz
 evaluation_run*.log
@@ -8,6 +10,4 @@ streamlit_xai*.log
 streamlit_logs.txt
 logs.txt
 cloudflared
-logs/
-*.sqlite3
-*.db
+.pytest_cache/
