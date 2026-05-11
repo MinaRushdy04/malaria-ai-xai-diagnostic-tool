@@ -9,5 +9,8 @@ streamlit_logs.txt
 logs.txt
 cloudflared
 logs/
+runs/
+mlruns/
+wandb/
 *.sqlite3
 *.db

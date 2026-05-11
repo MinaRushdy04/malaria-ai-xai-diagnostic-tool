@@ -35,6 +35,12 @@ jobs:
           python scripts/robustness_analysis.py --help
           python scripts/error_analysis.py --help
           python scripts/predict_image.py --help
+          python scripts/register_model.py --help
+          python scripts/export_api_contracts.py --help
+          python scripts/drift_monitor.py --help
+          python scripts/retraining_pipeline.py --help
+          python scripts/load_test.py --help
+          python scripts/validate_kubernetes.py --help
           python scripts/train_model.py --help
 
   docker-build:

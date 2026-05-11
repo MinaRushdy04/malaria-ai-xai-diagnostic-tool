@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import urllib.request
 import zipfile
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 
 import tensorflow as tf
 
+from scripts.experiment_tracking import log_experiment
 
-ROOT = Path(__file__).resolve().parents[1]
+
 DATASET_URL = "https://data.lhncbc.nlm.nih.gov/public/Malaria/cell_images.zip"
 RAW_ZIP_PATH = ROOT / "data" / "raw" / "cell_images.zip"
 EXTRACT_DIR = ROOT / "data" / "processed"
@@ -123,6 +129,9 @@ def main() -> None:
     parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--tracking-backend", choices=["none", "local", "mlflow", "wandb"], default="local")
+    parser.add_argument("--experiment-name", default="malaria-cell-classifier")
+    parser.add_argument("--run-name", default=None)
     args = parser.parse_args()
 
     tf.keras.utils.set_random_seed(args.seed)
@@ -146,9 +155,26 @@ def main() -> None:
         ),
     ]
 
-    model.fit(train_ds, validation_data=val_ds, epochs=args.epochs, callbacks=callbacks)
+    history = model.fit(train_ds, validation_data=val_ds, epochs=args.epochs, callbacks=callbacks)
     model.save(args.output)
+    final_metrics = {key: values[-1] for key, values in history.history.items() if values}
+    tracking_result = log_experiment(
+        backend=args.tracking_backend,
+        experiment_name=args.experiment_name,
+        run_name=args.run_name or f"mobilenetv2-seed-{args.seed}",
+        params={
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "dropout": args.dropout,
+            "learning_rate": args.learning_rate,
+            "seed": args.seed,
+            "model_output": str(args.output),
+        },
+        metrics={key: float(value) for key, value in final_metrics.items()},
+        artifacts=[args.output],
+    )
     print(f"Saved model to {args.output}")
+    print(f"Tracking: {tracking_result}")
 
 
 if __name__ == "__main__":

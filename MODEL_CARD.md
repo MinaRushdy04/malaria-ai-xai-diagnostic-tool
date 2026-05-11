@@ -72,6 +72,7 @@ reviewed alongside prediction errors and confidence calibration.
 - Predictions can be logged to local SQLite and CSV files without storing the raw uploaded image.
 - Correlation IDs, model version, model hash, and request timing make API predictions easier to trace.
 - A FastAPI-served browser dashboard demonstrates deployment without depending on Streamlit as the only interface.
+- The active model is recorded in a local registry manifest with threshold, hash, metrics, calibration, confidence intervals, and robustness summaries.
 
 ## Recommended Evaluation Before Any Serious Use
 
@@ -84,3 +85,4 @@ reviewed alongside prediction errors and confidence calibration.
 - False-positive and false-negative review
 - Synthetic robustness stress testing
 - Grad-CAM review across correct and incorrect predictions
+- Drift monitoring and gated retraining planning before replacing the registered model

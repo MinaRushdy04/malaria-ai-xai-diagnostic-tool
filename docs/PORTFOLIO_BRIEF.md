@@ -24,6 +24,8 @@ how failures are inspected, and how model behavior is monitored after inference.
   analysis.
 - Robustness and failure analysis: synthetic corruption tests and false-positive/false-negative
   gallery.
+- MLOps literacy: CI/CD workflows, model registry, API contracts, Kubernetes manifests, drift
+  monitoring, retraining orchestration, optional experiment tracking, and load testing.
 
 ## Honest Scope
 
@@ -38,3 +40,7 @@ The highest-value next step is a field-of-view workflow: detect cells or parasit
 classify each candidate, aggregate results into a case-level report, and route the most suspicious
 regions to expert review. That would move the project from image classification toward a more
 realistic microscopy workflow.
+
+The strongest way to talk about the MLOps pieces is honest: they are not proof of production
+clinical readiness, but they show that the project was designed with deployment, versioning,
+monitoring, and review loops in mind.

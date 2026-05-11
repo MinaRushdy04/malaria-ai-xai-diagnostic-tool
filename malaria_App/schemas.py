@@ -13,6 +13,8 @@ class HealthResponse(BaseModel):
     model_sha256: str
     default_parasitized_threshold: float
     default_review_margin: float
+    auth_required: bool
+    registry: dict[str, Any] | None = None
 
 
 class ImageQualityResponse(BaseModel):

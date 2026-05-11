@@ -64,6 +64,36 @@ Run the optional Streamlit research UI:
 docker compose --profile research-ui up --build
 ```
 
+## API Key
+
+Local development does not require an API key. To protect prediction, monitoring, and review
+endpoints, set:
+
+```bash
+set MALARIA_API_KEY=replace-with-a-long-random-value
+```
+
+Then pass:
+
+```text
+X-API-Key: replace-with-a-long-random-value
+```
+
+The dashboard includes an optional API-key field. `/health` and `/dashboard/` remain public so
+operators can check service status and load the UI.
+
+## Kubernetes
+
+The Kubernetes manifests live in `deploy/kubernetes/`:
+
+```bash
+python scripts/validate_kubernetes.py
+kubectl apply -k deploy/kubernetes
+```
+
+The HPA manifest is included as a scaling scaffold. Keep the deployment at one replica until
+audit/review logs are moved from local SQLite/CSV files to a shared database.
+
 ## Health Check
 
 The Compose API service includes a health check:

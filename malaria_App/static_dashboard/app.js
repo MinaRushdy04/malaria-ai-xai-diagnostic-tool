@@ -52,6 +52,16 @@ function newCorrelationId() {
   return `web-${Date.now()}`;
 }
 
+function apiHeaders(extra = {}) {
+  const headers = { ...extra };
+  const apiKeyInput = $("#apiKeyInput");
+  const apiKey = apiKeyInput ? apiKeyInput.value.trim() : "";
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  }
+  return headers;
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   const payload = await response.json().catch(() => ({}));
@@ -72,6 +82,9 @@ async function loadHealth() {
       health.status === "ok" ? "success" : "warning",
     );
     $("#modelVersion").textContent = `${health.model_version} | threshold ${formatNumber(health.default_parasitized_threshold)}`;
+    if (health.auth_required) {
+      $("#modelVersion").textContent += " | API key required";
+    }
     $("#thresholdInput").value = health.default_parasitized_threshold;
     $("#reviewMarginInput").value = health.default_review_margin;
     $("#thresholdValue").textContent = formatNumber(health.default_parasitized_threshold);
@@ -83,7 +96,9 @@ async function loadHealth() {
 
 async function loadMonitoring() {
   try {
-    const summary = await fetchJson("/monitoring/summary?limit=200");
+    const summary = await fetchJson("/monitoring/summary?limit=200", {
+      headers: apiHeaders(),
+    });
     $("#totalPredictions").textContent = summary.total_predictions;
     $("#reviewRate").textContent = formatPercent(summary.review_rate);
     $("#warningRate").textContent = formatPercent(summary.validation_warning_rate);
@@ -112,7 +127,9 @@ function queueCard(row) {
 async function loadQueue() {
   const list = $("#queueList");
   try {
-    const payload = await fetchJson("/review/queue?limit=12");
+    const payload = await fetchJson("/review/queue?limit=12", {
+      headers: apiHeaders(),
+    });
     const rows = payload.items || [];
     $("#queueCount").textContent = `${rows.length} cases`;
     list.innerHTML = rows.length
@@ -199,7 +216,7 @@ async function handlePredictionSubmit(event) {
   try {
     const payload = await fetchJson("/predict", {
       method: "POST",
-      headers: { "X-Correlation-ID": correlationId },
+      headers: apiHeaders({ "X-Correlation-ID": correlationId }),
       body,
     });
     renderPrediction(payload, correlationId);
@@ -224,7 +241,7 @@ async function handleFeedbackSubmit(event) {
   try {
     await fetchJson("/review/feedback", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: apiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         request_id: state.activeRequestId,
         reviewer_decision: $("#reviewerDecision").value,

@@ -1,11 +1,11 @@
-.PHONY: install test compile app api web calibration confidence-intervals robustness error-gallery docker-build docker-up docker-streamlit
+.PHONY: install test compile app api web calibration confidence-intervals robustness error-gallery contracts register-model drift retraining-plan load-test k8s-validate docker-build docker-up docker-streamlit
 
 install:
 	python -m pip install --upgrade pip
 	pip install -r requirements.txt
 
 compile:
-	python -m py_compile malaria_App/app.py malaria_App/diagnostic_core.py malaria_App/api.py malaria_App/middleware.py malaria_App/schemas.py scripts/evaluate_threshold.py scripts/predict_image.py scripts/train_model.py scripts/calibration_analysis.py scripts/confidence_intervals.py scripts/robustness_analysis.py scripts/error_analysis.py tests/test_core_safety.py
+	python -m py_compile malaria_App/app.py malaria_App/diagnostic_core.py malaria_App/api.py malaria_App/middleware.py malaria_App/model_registry.py malaria_App/schemas.py scripts/evaluate_threshold.py scripts/predict_image.py scripts/train_model.py scripts/calibration_analysis.py scripts/confidence_intervals.py scripts/robustness_analysis.py scripts/error_analysis.py scripts/register_model.py scripts/export_api_contracts.py scripts/drift_monitor.py scripts/retraining_pipeline.py scripts/load_test.py scripts/validate_kubernetes.py tests/test_core_safety.py
 
 test: compile
 	python -m pytest tests -q
@@ -29,6 +29,24 @@ robustness:
 
 error-gallery:
 	python scripts/error_analysis.py --limit-per-type 12
+
+contracts:
+	python scripts/export_api_contracts.py
+
+register-model:
+	python scripts/register_model.py
+
+drift:
+	python scripts/drift_monitor.py
+
+retraining-plan:
+	python scripts/retraining_pipeline.py
+
+load-test:
+	python scripts/load_test.py --target health --requests 20 --concurrency 4
+
+k8s-validate:
+	python scripts/validate_kubernetes.py
 
 docker-build:
 	docker build -t malaria-ai-xai .

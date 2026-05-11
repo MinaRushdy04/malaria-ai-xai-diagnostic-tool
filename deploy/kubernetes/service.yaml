@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: malaria-ai-api
+  namespace: malaria-ai
+  labels:
+    app.kubernetes.io/name: malaria-ai
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: malaria-ai
+    app.kubernetes.io/component: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

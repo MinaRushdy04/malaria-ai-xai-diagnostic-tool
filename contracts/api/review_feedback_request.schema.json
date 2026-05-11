@@ -1,0 +1,23 @@
+{
+  "properties": {
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "reviewer_decision": {
+      "title": "Reviewer Decision",
+      "type": "string"
+    },
+    "reviewer_notes": {
+      "default": "",
+      "title": "Reviewer Notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "reviewer_decision"
+  ],
+  "title": "ReviewFeedbackRequest",
+  "type": "object"
+}

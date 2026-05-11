@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -25,6 +26,7 @@ try:
         write_prediction_log,
     )
     from .middleware import CorrelationIdMiddleware
+    from .model_registry import read_active_model_record
     from .schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse, ReviewFeedbackRequest
 except ImportError:
     from diagnostic_core import (
@@ -45,6 +47,7 @@ except ImportError:
         write_prediction_log,
     )
     from middleware import CorrelationIdMiddleware
+    from model_registry import read_active_model_record
     from schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse, ReviewFeedbackRequest
 
 
@@ -70,6 +73,16 @@ def root():
     return RedirectResponse(url="/dashboard/")
 
 
+def auth_required() -> bool:
+    return bool(os.environ.get("MALARIA_API_KEY"))
+
+
+def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
+    expected_api_key = os.environ.get("MALARIA_API_KEY")
+    if expected_api_key and x_api_key != expected_api_key:
+        raise HTTPException(status_code=401, detail="Missing or invalid API key.")
+
+
 def get_model():
     global _MODEL, _MODEL_ERROR
     if _MODEL is None and _MODEL_ERROR is None:
@@ -90,25 +103,31 @@ def health():
         "model_sha256": model_sha256(),
         "default_parasitized_threshold": PARASITIZED_THRESHOLD,
         "default_review_margin": DEFAULT_REVIEW_MARGIN,
+        "auth_required": auth_required(),
+        "registry": read_active_model_record(),
     }
 
 
-@app.get("/monitoring/summary", response_model=MonitoringSummaryResponse)
+@app.get(
+    "/monitoring/summary",
+    response_model=MonitoringSummaryResponse,
+    dependencies=[Depends(require_api_key)],
+)
 def monitoring_summary(limit: int = 200):
     return summarize_logs(limit=limit)
 
 
-@app.get("/review/queue")
+@app.get("/review/queue", dependencies=[Depends(require_api_key)])
 def review_queue(limit: int = 50):
     return {"items": read_active_learning_queue(limit=limit)}
 
 
-@app.get("/review/feedback")
+@app.get("/review/feedback", dependencies=[Depends(require_api_key)])
 def review_feedback(limit: int = 100):
     return {"items": read_review_feedback(limit=limit)}
 
 
-@app.post("/review/feedback")
+@app.post("/review/feedback", dependencies=[Depends(require_api_key)])
 def create_review_feedback(feedback: ReviewFeedbackRequest):
     prediction_row = read_prediction_by_request_id(feedback.request_id)
     if prediction_row is None:
@@ -120,7 +139,11 @@ def create_review_feedback(feedback: ReviewFeedbackRequest):
     )
 
 
-@app.post("/predict", response_model=PredictionApiResponse)
+@app.post(
+    "/predict",
+    response_model=PredictionApiResponse,
+    dependencies=[Depends(require_api_key)],
+)
 async def predict(
     request: Request,
     file: UploadFile = File(...),

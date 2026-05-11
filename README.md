@@ -31,6 +31,12 @@ FastAPI-served web dashboard, an optional Streamlit research UI, and committed e
 - Robustness analysis under blur, noise, contrast, exposure, and compression degradation.
 - Error-analysis gallery for false positives and false negatives.
 - Docker and Docker Compose setup for dashboard/API execution.
+- Kubernetes manifests for API orchestration with health probes, config, secret template, service, ingress, and HPA scaffold.
+- Model registry manifest with model hash, approved threshold, evaluation metrics, confidence intervals, calibration, and robustness summary.
+- API contracts exported from Pydantic schemas.
+- Optional API-key protection for prediction, monitoring, and review endpoints.
+- Experiment tracking hooks for local JSON records, optional MLflow, and optional W&B.
+- Drift monitoring, retraining orchestration, and load-test scripts.
 - GitHub Actions CI and Makefile targets for repeatable checks.
 - Human-in-the-loop review queue with reviewer feedback storage and CSV export.
 - Script-first utilities for training, threshold evaluation, calibration, robustness, error analysis, and single-image CLI prediction.
@@ -51,8 +57,14 @@ FastAPI-served web dashboard, an optional Streamlit research UI, and committed e
 |   |-- ARCHITECTURE.md
 |   |-- DATASETS.md
 |   |-- DEPLOYMENT.md
+|   |-- MLOPS.md
 |   |-- OPERATIONS.md
 |   `-- PORTFOLIO_BRIEF.md
+|-- contracts/
+|   `-- api/
+|-- deploy/
+|   |-- cloud/
+|   `-- kubernetes/
 |-- malaria_App/
 |   |-- __init__.py
 |   |-- api.py
@@ -70,16 +82,25 @@ FastAPI-served web dashboard, an optional Streamlit research UI, and committed e
 |   |-- confidence_intervals/
 |   `-- robustness/
 |-- requirements.txt
+|-- registry/
+|   |-- model_registry.json
+|   `-- models/
 |-- notebooks/
 |   `-- 01_model_exploration.ipynb
 |-- scripts/
 |   |-- calibration_analysis.py
 |   |-- confidence_intervals.py
+|   |-- drift_monitor.py
 |   |-- error_analysis.py
+|   |-- export_api_contracts.py
 |   |-- evaluate_threshold.py
+|   |-- load_test.py
 |   |-- predict_image.py
+|   |-- register_model.py
+|   |-- retraining_pipeline.py
 |   |-- robustness_analysis.py
-|   `-- train_model.py
+|   |-- train_model.py
+|   `-- validate_kubernetes.py
 |-- tests/
 |   `-- test_core_safety.py
 ```
@@ -407,6 +428,22 @@ Then open:
 
 - Streamlit research UI: `http://127.0.0.1:8501`
 
+## MLOps And Deployment Automation
+
+The repository includes a lightweight MLOps layer:
+
+- `.github/workflows/ci.yml`: tests, compile checks, CLI smoke checks, and Docker build.
+- `.github/workflows/mlops-governance.yml`: model registry validation, API contract export, and Kubernetes manifest validation.
+- `.github/workflows/release-container.yml`: manual/tag-based Docker publishing to GHCR.
+- `registry/model_registry.json`: active model version, hash, threshold, stage, and manifest path.
+- `contracts/api/`: JSON Schema contracts exported from FastAPI/Pydantic response models.
+- `deploy/kubernetes/`: Kubernetes manifests for the API service.
+- `scripts/drift_monitor.py`: compares baseline predictions with recent logged predictions.
+- `scripts/retraining_pipeline.py`: creates a gated retraining plan and can execute retraining when explicitly enabled.
+- `scripts/load_test.py`: lightweight API load/scalability smoke test.
+
+See [MLOps](docs/MLOPS.md) and [Deployment](docs/DEPLOYMENT.md) for details and boundaries.
+
 ## Run The FastAPI Service
 
 From the repository root:
@@ -537,6 +574,10 @@ make calibration
 make confidence-intervals
 make robustness
 make error-gallery
+make contracts
+make register-model
+make k8s-validate
+make load-test
 make docker-up
 make docker-streamlit
 ```

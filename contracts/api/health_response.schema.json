@@ -1,0 +1,68 @@
+{
+  "properties": {
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "model_loaded": {
+      "title": "Model Loaded",
+      "type": "boolean"
+    },
+    "model_error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Model Error"
+    },
+    "model_version": {
+      "title": "Model Version",
+      "type": "string"
+    },
+    "model_sha256": {
+      "title": "Model Sha256",
+      "type": "string"
+    },
+    "default_parasitized_threshold": {
+      "title": "Default Parasitized Threshold",
+      "type": "number"
+    },
+    "default_review_margin": {
+      "title": "Default Review Margin",
+      "type": "number"
+    },
+    "auth_required": {
+      "title": "Auth Required",
+      "type": "boolean"
+    },
+    "registry": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Registry"
+    }
+  },
+  "required": [
+    "status",
+    "model_loaded",
+    "model_error",
+    "model_version",
+    "model_sha256",
+    "default_parasitized_threshold",
+    "default_review_margin",
+    "auth_required"
+  ],
+  "title": "HealthResponse",
+  "type": "object"
+}

@@ -1,0 +1,334 @@
+{
+  "$defs": {
+    "ImageQualityResponse": {
+      "properties": {
+        "brightness_mean": {
+          "title": "Brightness Mean",
+          "type": "number"
+        },
+        "contrast_std": {
+          "title": "Contrast Std",
+          "type": "number"
+        },
+        "focus_score": {
+          "title": "Focus Score",
+          "type": "number"
+        },
+        "saturation_mean": {
+          "title": "Saturation Mean",
+          "type": "number"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "brightness_mean",
+        "contrast_std",
+        "focus_score",
+        "saturation_mean",
+        "warnings",
+        "passed"
+      ],
+      "title": "ImageQualityResponse",
+      "type": "object"
+    },
+    "ModelResponse": {
+      "properties": {
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "input_size": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Input Size",
+          "type": "array"
+        }
+      },
+      "required": [
+        "version",
+        "sha256",
+        "input_size"
+      ],
+      "title": "ModelResponse",
+      "type": "object"
+    },
+    "PredictionResponse": {
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "correlation_id": {
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "model_version": {
+          "title": "Model Version",
+          "type": "string"
+        },
+        "model_sha256": {
+          "title": "Model Sha256",
+          "type": "string"
+        },
+        "predicted_class": {
+          "title": "Predicted Class",
+          "type": "string"
+        },
+        "raw_uninfected_score": {
+          "title": "Raw Uninfected Score",
+          "type": "number"
+        },
+        "parasitized_score": {
+          "title": "Parasitized Score",
+          "type": "number"
+        },
+        "threshold": {
+          "title": "Threshold",
+          "type": "number"
+        },
+        "prediction_score": {
+          "title": "Prediction Score",
+          "type": "number"
+        },
+        "decision_margin": {
+          "title": "Decision Margin",
+          "type": "number"
+        },
+        "review_margin": {
+          "title": "Review Margin",
+          "type": "number"
+        },
+        "review_required": {
+          "title": "Review Required",
+          "type": "boolean"
+        },
+        "review_reason": {
+          "title": "Review Reason",
+          "type": "string"
+        },
+        "recommendation": {
+          "title": "Recommendation",
+          "type": "string"
+        },
+        "gradcam_layer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gradcam Layer"
+        }
+      },
+      "required": [
+        "request_id",
+        "correlation_id",
+        "model_version",
+        "model_sha256",
+        "predicted_class",
+        "raw_uninfected_score",
+        "parasitized_score",
+        "threshold",
+        "prediction_score",
+        "decision_margin",
+        "review_margin",
+        "review_required",
+        "review_reason",
+        "recommendation"
+      ],
+      "title": "PredictionResponse",
+      "type": "object"
+    },
+    "ValidationResponse": {
+      "properties": {
+        "content_sha256": {
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "filename_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Filename Hash"
+        },
+        "file_extension": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "File Extension"
+        },
+        "byte_size": {
+          "title": "Byte Size",
+          "type": "integer"
+        },
+        "format": {
+          "title": "Format",
+          "type": "string"
+        },
+        "mode": {
+          "title": "Mode",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "quality": {
+          "$ref": "#/$defs/ImageQualityResponse"
+        }
+      },
+      "required": [
+        "content_sha256",
+        "filename_hash",
+        "file_extension",
+        "byte_size",
+        "format",
+        "mode",
+        "width",
+        "height",
+        "warnings",
+        "quality"
+      ],
+      "title": "ValidationResponse",
+      "type": "object"
+    },
+    "XAIResponse": {
+      "properties": {
+        "gradcam_layer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gradcam Layer"
+        },
+        "xai_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Xai Error"
+        },
+        "gradcam_overlay": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PNG data URI",
+          "title": "Gradcam Overlay"
+        },
+        "heatmap": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PNG data URI",
+          "title": "Heatmap"
+        }
+      },
+      "title": "XAIResponse",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "prediction": {
+      "$ref": "#/$defs/PredictionResponse"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationResponse"
+    },
+    "tensor_shape": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Tensor Shape",
+      "type": "array"
+    },
+    "xai": {
+      "$ref": "#/$defs/XAIResponse"
+    },
+    "model": {
+      "$ref": "#/$defs/ModelResponse"
+    },
+    "logging": {
+      "additionalProperties": true,
+      "title": "Logging",
+      "type": "object"
+    }
+  },
+  "required": [
+    "prediction",
+    "validation",
+    "tensor_shape",
+    "xai",
+    "model",
+    "logging"
+  ],
+  "title": "PredictionApiResponse",
+  "type": "object"
+}

@@ -87,6 +87,17 @@ def test_api_serves_dashboard_entrypoint():
     assert "Clinical Review Workbench" in dashboard_response.text
 
 
+def test_api_key_can_protect_operational_endpoints(monkeypatch):
+    monkeypatch.setenv("MALARIA_API_KEY", "secret-test-key")
+    client = TestClient(api_app)
+
+    rejected_response = client.get("/monitoring/summary")
+    assert rejected_response.status_code == 401
+
+    accepted_response = client.get("/monitoring/summary", headers={"X-API-Key": "secret-test-key"})
+    assert accepted_response.status_code == 200
+
+
 def test_review_feedback_removes_case_from_active_queue(tmp_path, monkeypatch):
     monkeypatch.setattr(core, "LOG_DIR", tmp_path)
     monkeypatch.setattr(core, "SQLITE_LOG_PATH", tmp_path / "predictions.sqlite3")

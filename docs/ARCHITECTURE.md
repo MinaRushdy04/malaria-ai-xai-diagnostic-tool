@@ -41,6 +41,15 @@ Shared Diagnostic Core
     |-- reviewer feedback storage
     |-- active-learning queue
     `-- monitoring summaries
+
+MLOps Layer
+    |-- GitHub Actions CI and release workflows
+    |-- model registry manifest
+    |-- API data contracts
+    |-- Kubernetes manifests
+    |-- drift monitor
+    |-- retraining orchestrator
+    `-- load-test script
 ```
 
 ## Key Files
@@ -53,7 +62,15 @@ Shared Diagnostic Core
 - `malaria_App/schemas.py`: typed FastAPI response schemas.
 - `Makefile`: repeatable local commands for checks, reports, and services.
 - `.github/workflows/ci.yml`: CI for compile checks, tests, script smoke checks, and Docker build.
+- `.github/workflows/mlops-governance.yml`: validates model registry, API contracts, and Kubernetes manifests.
+- `.github/workflows/release-container.yml`: publishes tagged/manual container builds to GHCR.
+- `registry/`: active model registry and model manifest.
+- `contracts/api/`: JSON Schema API contracts exported from Pydantic models.
+- `deploy/kubernetes/`: Kubernetes deployment, service, ingress, secret template, and HPA scaffold.
 - `scripts/train_model.py`: script-first training entry point.
+- `scripts/drift_monitor.py`: baseline-vs-current drift report generation.
+- `scripts/retraining_pipeline.py`: gated retraining orchestration.
+- `scripts/load_test.py`: lightweight API load/scalability smoke test.
 - `scripts/evaluate_threshold.py`: reproducible threshold and metrics report generation.
 - `scripts/predict_image.py`: CLI inference entry point.
 - `tests/test_core_safety.py`: safety behavior tests.

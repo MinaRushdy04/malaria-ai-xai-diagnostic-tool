@@ -53,6 +53,50 @@ Error gallery:
 make error-gallery
 ```
 
+## MLOps Utilities
+
+Export API contracts:
+
+```bash
+make contracts
+```
+
+Validate active model registry:
+
+```bash
+python scripts/register_model.py --check
+```
+
+Regenerate model registry:
+
+```bash
+make register-model
+```
+
+Validate Kubernetes manifests:
+
+```bash
+make k8s-validate
+```
+
+Run a lightweight health endpoint load test:
+
+```bash
+make load-test
+```
+
+Run drift monitoring after collecting prediction logs:
+
+```bash
+make drift
+```
+
+Create a dry-run retraining plan:
+
+```bash
+make retraining-plan
+```
+
 ## Docker
 
 Build the image:

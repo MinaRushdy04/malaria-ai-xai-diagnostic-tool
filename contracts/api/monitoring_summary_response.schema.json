@@ -1,0 +1,46 @@
+{
+  "properties": {
+    "total_predictions": {
+      "title": "Total Predictions",
+      "type": "integer"
+    },
+    "review_rate": {
+      "title": "Review Rate",
+      "type": "number"
+    },
+    "validation_warning_rate": {
+      "title": "Validation Warning Rate",
+      "type": "number"
+    },
+    "quality_pass_rate": {
+      "title": "Quality Pass Rate",
+      "type": "number"
+    },
+    "avg_focus_score": {
+      "title": "Avg Focus Score",
+      "type": "number"
+    },
+    "avg_brightness": {
+      "title": "Avg Brightness",
+      "type": "number"
+    },
+    "class_counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Class Counts",
+      "type": "object"
+    }
+  },
+  "required": [
+    "total_predictions",
+    "review_rate",
+    "validation_warning_rate",
+    "quality_pass_rate",
+    "avg_focus_score",
+    "avg_brightness",
+    "class_counts"
+  ],
+  "title": "MonitoringSummaryResponse",
+  "type": "object"
+}

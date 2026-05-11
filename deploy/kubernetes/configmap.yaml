@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: malaria-ai-config
+  namespace: malaria-ai
+  labels:
+    app.kubernetes.io/name: malaria-ai
+data:
+  MALARIA_LOG_DIR: /app/logs
+  TF_CPP_MIN_LOG_LEVEL: "2"
+  TF_ENABLE_ONEDNN_OPTS: "0"

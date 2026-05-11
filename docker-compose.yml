@@ -6,6 +6,8 @@ services:
       - "8000:8000"
     volumes:
       - ./logs:/app/logs
+    environment:
+      MALARIA_API_KEY: ${MALARIA_API_KEY:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: malaria-ai-api
+  namespace: malaria-ai
+  labels:
+    app.kubernetes.io/name: malaria-ai
+    app.kubernetes.io/component: api
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  rules:
+    - host: malaria-ai.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: malaria-ai-api
+                port:
+                  name: http
