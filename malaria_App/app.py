@@ -16,6 +16,7 @@ try:
         diagnose_image,
         load_keras_model,
         read_recent_logs,
+        summarize_logs,
         validate_image_bytes,
         write_prediction_log,
     )
@@ -28,6 +29,7 @@ except ImportError:
         diagnose_image,
         load_keras_model,
         read_recent_logs,
+        summarize_logs,
         validate_image_bytes,
         write_prediction_log,
     )
@@ -217,6 +219,7 @@ def render_prediction(prediction: dict[str, Any]) -> None:
 
 def render_validation(validation: dict[str, Any]) -> None:
     with st.expander("Input validation details", expanded=False):
+        quality = validation.get("quality") or {}
         st.write(
             {
                 "format": validation["format"],
@@ -228,6 +231,12 @@ def render_validation(validation: dict[str, Any]) -> None:
                 "filename_hash": validation["filename_hash"],
             }
         )
+        quality_cols = st.columns(4)
+        quality_cols[0].metric("Brightness", f"{quality.get('brightness_mean', 0.0):.1f}")
+        quality_cols[1].metric("Contrast", f"{quality.get('contrast_std', 0.0):.1f}")
+        quality_cols[2].metric("Focus score", f"{quality.get('focus_score', 0.0):.1f}")
+        quality_cols[3].metric("Quality gate", "Pass" if quality.get("passed") else "Review")
+
         warnings = validation.get("warnings") or []
         if warnings:
             st.warning(" ".join(warnings))
@@ -238,8 +247,9 @@ def render_validation(validation: dict[str, Any]) -> None:
             """
             The validation layer checks that the upload is a supported static image, can be
             decoded safely, is not empty or oversized, has usable dimensions, and can be
-            normalized to RGB before inference. It does not prove the image is clinically
-            appropriate; questionable inputs are routed to review instead of being silently trusted.
+            normalized to RGB before inference. The quality gate adds brightness, contrast,
+            and focus checks. It does not prove the image is clinically appropriate;
+            questionable inputs are routed to review instead of being silently trusted.
             """
         )
 
@@ -290,14 +300,35 @@ def render_recent_logs() -> None:
         {
             "time": row["timestamp_utc"],
             "source": row["source"],
+            "correlation": (row.get("correlation_id") or "")[:8],
             "class": row["predicted_class"],
             "score": round(float(row["parasitized_score"]), 3),
             "threshold": round(float(row["threshold"]), 3),
             "review": bool(int(row["review_required"])),
+            "focus": round(float(row.get("quality_focus_score") or 0.0), 1),
         }
         for row in rows
     ]
     st.dataframe(display_rows, width="stretch", hide_index=True)
+
+
+def render_monitoring_snapshot() -> None:
+    summary = summarize_logs(limit=200)
+    if summary["total_predictions"] == 0:
+        st.caption("Monitoring snapshot appears after local predictions are logged.")
+        return
+
+    cols = st.columns(2)
+    cols[0].metric("Logged predictions", summary["total_predictions"])
+    cols[1].metric("Review rate", f"{summary['review_rate'] * 100:.1f}%")
+    cols = st.columns(2)
+    cols[0].metric("Quality pass rate", f"{summary['quality_pass_rate'] * 100:.1f}%")
+    cols[1].metric("Warning rate", f"{summary['validation_warning_rate'] * 100:.1f}%")
+    st.caption(
+        f"Average focus {summary['avg_focus_score']:.1f}; "
+        f"average brightness {summary['avg_brightness']:.1f}; "
+        f"class mix {summary['class_counts']}"
+    )
 
 
 st.markdown('<div class="main-title">Malaria Cell-Smear AI Diagnostic Prototype</div>', unsafe_allow_html=True)
@@ -340,6 +371,9 @@ with st.sidebar:
             except Exception as exc:
                 st.error(f"Health check failed: {exc}")
         st.caption("Start the service with: uvicorn malaria_App.api:app --reload")
+
+    with st.expander("Monitoring snapshot", expanded=False):
+        render_monitoring_snapshot()
 
     with st.expander("Recent local logs", expanded=False):
         render_recent_logs()
@@ -412,9 +446,13 @@ with right_col:
             st.write(
                 {
                     "request_id": package.result.request_id,
+                    "correlation_id": package.result.correlation_id,
+                    "model_version": package.result.model_version,
+                    "model_sha256": package.result.model_sha256,
                     "tensor_shape": package.tensor_shape,
                     "raw_uninfected_score": package.result.raw_uninfected_score,
                     "parasitized_score": package.result.parasitized_score,
+                    "quality": package.validation.quality.to_dict(),
                     "gradcam_layer": package.result.gradcam_layer,
                     "logging": log_status,
                 }
@@ -445,6 +483,8 @@ with right_col:
             st.write(
                 {
                     "request_id": payload["prediction"]["request_id"],
+                    "correlation_id": payload["prediction"]["correlation_id"],
+                    "model": payload.get("model"),
                     "tensor_shape": payload["tensor_shape"],
                     "validation": payload["validation"],
                     "logging": payload.get("logging"),

@@ -26,6 +26,7 @@ LOG_DIR = Path(os.environ.get("MALARIA_LOG_DIR", ROOT_DIR / "logs"))
 SQLITE_LOG_PATH = LOG_DIR / "predictions.sqlite3"
 CSV_LOG_PATH = LOG_DIR / "predictions.csv"
 
+MODEL_VERSION = "mobilenetv2-malaria-cell-v1"
 IMG_SIZE = (224, 224)
 PARASITIZED_THRESHOLD = 0.285
 DEFAULT_REVIEW_MARGIN = 0.075
@@ -33,6 +34,10 @@ MIN_IMAGE_SIDE = 50
 WARN_IMAGE_SIDE = 100
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_PIXELS = 20_000_000
+MIN_FOCUS_SCORE = 4.0
+MIN_CONTRAST_STD = 12.0
+MIN_BRIGHTNESS_MEAN = 25.0
+MAX_BRIGHTNESS_MEAN = 235.0
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 ALLOWED_FORMATS = {"JPEG", "PNG"}
 
@@ -47,6 +52,22 @@ class ImageValidationError(ValueError):
 
 
 @dataclass
+class ImageQualityReport:
+    brightness_mean: float
+    contrast_std: float
+    focus_score: float
+    saturation_mean: float
+    warnings: list[str]
+
+    @property
+    def passed(self) -> bool:
+        return not self.warnings
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self) | {"passed": self.passed}
+
+
+@dataclass
 class ValidationMetadata:
     content_sha256: str
     filename_hash: str | None
@@ -57,9 +78,10 @@ class ValidationMetadata:
     width: int
     height: int
     warnings: list[str]
+    quality: ImageQualityReport
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return asdict(self) | {"quality": self.quality.to_dict()}
 
 
 @dataclass
@@ -71,6 +93,9 @@ class ValidatedImage:
 @dataclass
 class PredictionResult:
     request_id: str
+    correlation_id: str
+    model_version: str
+    model_sha256: str
     predicted_class: str
     raw_uninfected_score: float
     parasitized_score: float
@@ -103,6 +128,17 @@ def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+@lru_cache(maxsize=1)
+def model_sha256() -> str:
+    if not MODEL_PATH.exists():
+        return "missing"
+    digest = hashlib.sha256()
+    with MODEL_PATH.open("rb") as model_file:
+        for chunk in iter(lambda: model_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _safe_float(value: float, minimum: float, maximum: float, name: str) -> float:
     value = float(value)
     if value < minimum or value > maximum:
@@ -114,6 +150,48 @@ def validate_policy(threshold: float, review_margin: float) -> tuple[float, floa
     threshold = _safe_float(threshold, 0.01, 0.99, "threshold")
     review_margin = _safe_float(review_margin, 0.0, 0.40, "review_margin")
     return threshold, review_margin
+
+
+def assess_image_quality(image: Image.Image) -> ImageQualityReport:
+    image_array = np.asarray(image.convert("RGB"), dtype=np.float32)
+    gray = (
+        0.299 * image_array[:, :, 0]
+        + 0.587 * image_array[:, :, 1]
+        + 0.114 * image_array[:, :, 2]
+    )
+    brightness_mean = float(np.mean(gray))
+    contrast_std = float(np.std(gray))
+    horizontal_detail = np.diff(gray, axis=1)
+    vertical_detail = np.diff(gray, axis=0)
+    focus_score = float((np.var(horizontal_detail) + np.var(vertical_detail)) / 2.0)
+
+    max_rgb = np.max(image_array, axis=2)
+    min_rgb = np.min(image_array, axis=2)
+    saturation = np.divide(
+        max_rgb - min_rgb,
+        np.maximum(max_rgb, 1.0),
+        out=np.zeros_like(max_rgb),
+        where=max_rgb > 0,
+    )
+    saturation_mean = float(np.mean(saturation))
+
+    warnings: list[str] = []
+    if brightness_mean < MIN_BRIGHTNESS_MEAN:
+        warnings.append("Image appears underexposed.")
+    elif brightness_mean > MAX_BRIGHTNESS_MEAN:
+        warnings.append("Image appears overexposed.")
+    if contrast_std < MIN_CONTRAST_STD:
+        warnings.append("Image has low contrast; staining or illumination may be poor.")
+    if focus_score < MIN_FOCUS_SCORE:
+        warnings.append("Image appears low-detail or out of focus.")
+
+    return ImageQualityReport(
+        brightness_mean=brightness_mean,
+        contrast_std=contrast_std,
+        focus_score=focus_score,
+        saturation_mean=saturation_mean,
+        warnings=warnings,
+    )
 
 
 def validate_image_bytes(image_bytes: bytes, filename: str | None = None) -> ValidatedImage:
@@ -173,6 +251,9 @@ def validate_image_bytes(image_bytes: bytes, filename: str | None = None) -> Val
             "Image aspect ratio is unusual for a cropped single-cell smear image."
         )
 
+    quality = assess_image_quality(image)
+    warnings.extend(quality.warnings)
+
     if errors:
         raise ImageValidationError("Input validation failed.", errors)
 
@@ -186,6 +267,7 @@ def validate_image_bytes(image_bytes: bytes, filename: str | None = None) -> Val
         width=width,
         height=height,
         warnings=warnings,
+        quality=quality,
     )
     return ValidatedImage(image=image, metadata=metadata)
 
@@ -382,6 +464,7 @@ def diagnose_image(
     include_xai: bool = True,
     include_activation: bool = False,
     route_warnings_to_review: bool = True,
+    correlation_id: str | None = None,
 ) -> DiagnosisPackage:
     threshold, review_margin = validate_policy(threshold, review_margin)
     img_batch = preprocess_image(validated.image)
@@ -402,6 +485,9 @@ def diagnose_image(
 
     result = PredictionResult(
         request_id=str(uuid.uuid4()),
+        correlation_id=correlation_id or str(uuid.uuid4()),
+        model_version=MODEL_VERSION,
+        model_sha256=model_sha256(),
         predicted_class=predicted_class,
         raw_uninfected_score=raw_score,
         parasitized_score=parasitized_score,
@@ -461,12 +547,20 @@ def package_to_api_payload(package: DiagnosisPackage) -> dict[str, Any]:
         "validation": package.validation.to_dict(),
         "tensor_shape": package.tensor_shape,
         "xai": xai,
+        "model": {
+            "version": package.result.model_version,
+            "sha256": package.result.model_sha256,
+            "input_size": IMG_SIZE,
+        },
     }
 
 
 LOG_COLUMNS = [
     "timestamp_utc",
     "request_id",
+    "correlation_id",
+    "model_version",
+    "model_sha256",
     "source",
     "predicted_class",
     "raw_uninfected_score",
@@ -485,6 +579,11 @@ LOG_COLUMNS = [
     "height",
     "byte_size",
     "validation_warnings",
+    "quality_brightness_mean",
+    "quality_contrast_std",
+    "quality_focus_score",
+    "quality_saturation_mean",
+    "quality_passed",
     "gradcam_layer",
 ]
 
@@ -495,6 +594,9 @@ def _log_record(package: DiagnosisPackage, source: str) -> dict[str, Any]:
     return {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "request_id": result.request_id,
+        "correlation_id": result.correlation_id,
+        "model_version": result.model_version,
+        "model_sha256": result.model_sha256,
         "source": source,
         "predicted_class": result.predicted_class,
         "raw_uninfected_score": result.raw_uninfected_score,
@@ -513,6 +615,11 @@ def _log_record(package: DiagnosisPackage, source: str) -> dict[str, Any]:
         "height": validation.height,
         "byte_size": validation.byte_size,
         "validation_warnings": json.dumps(validation.warnings),
+        "quality_brightness_mean": validation.quality.brightness_mean,
+        "quality_contrast_std": validation.quality.contrast_std,
+        "quality_focus_score": validation.quality.focus_score,
+        "quality_saturation_mean": validation.quality.saturation_mean,
+        "quality_passed": int(validation.quality.passed),
         "gradcam_layer": result.gradcam_layer,
     }
 
@@ -520,6 +627,13 @@ def _log_record(package: DiagnosisPackage, source: str) -> dict[str, Any]:
 def _ensure_sqlite_schema(connection: sqlite3.Connection) -> None:
     columns_sql = ", ".join(f"{column} TEXT" for column in LOG_COLUMNS)
     connection.execute(f"CREATE TABLE IF NOT EXISTS predictions ({columns_sql})")
+    existing_columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(predictions)").fetchall()
+    }
+    for column in LOG_COLUMNS:
+        if column not in existing_columns:
+            connection.execute(f"ALTER TABLE predictions ADD COLUMN {column} TEXT")
     connection.commit()
 
 
@@ -572,3 +686,46 @@ def read_recent_logs(limit: int = 20) -> list[dict[str, Any]]:
             (int(limit),),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def summarize_logs(limit: int = 200) -> dict[str, Any]:
+    rows = read_recent_logs(limit=limit)
+    if not rows:
+        return {
+            "total_predictions": 0,
+            "review_rate": 0.0,
+            "validation_warning_rate": 0.0,
+            "quality_pass_rate": 0.0,
+            "avg_focus_score": 0.0,
+            "avg_brightness": 0.0,
+            "class_counts": {},
+        }
+
+    def safe_float(row: dict[str, Any], key: str) -> float:
+        try:
+            return float(row.get(key) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def safe_bool(row: dict[str, Any], key: str) -> bool:
+        value = row.get(key)
+        return str(value).lower() in {"1", "true", "yes"}
+
+    total = len(rows)
+    review_count = sum(1 for row in rows if safe_bool(row, "review_required"))
+    warning_count = sum(1 for row in rows if row.get("validation_warnings") not in {"", "[]", None})
+    quality_pass_count = sum(1 for row in rows if safe_bool(row, "quality_passed"))
+    class_counts: dict[str, int] = {}
+    for row in rows:
+        label = str(row.get("predicted_class") or "unknown")
+        class_counts[label] = class_counts.get(label, 0) + 1
+
+    return {
+        "total_predictions": total,
+        "review_rate": review_count / total,
+        "validation_warning_rate": warning_count / total,
+        "quality_pass_rate": quality_pass_count / total,
+        "avg_focus_score": sum(safe_float(row, "quality_focus_score") for row in rows) / total,
+        "avg_brightness": sum(safe_float(row, "quality_brightness_mean") for row in rows) / total,
+        "class_counts": class_counts,
+    }

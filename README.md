@@ -16,9 +16,11 @@ accuracy as the only measure of success.
 - FastAPI inference layer with `/health` and `/predict` endpoints.
 - Grad-CAM overlay for model attention, plus optional activation-map debug view.
 - Validation-based threshold rationale for the `Parasitized` class.
-- Flexible expert-review routing for near-threshold or validation-warning cases.
-- Input validation before inference: file type, decodability, size, dimensions, static image check, and RGB normalization.
+- Flexible expert-review routing for near-threshold, validation-warning, or quality-warning cases.
+- Input validation before inference: file type, decodability, size, dimensions, static image check, RGB normalization, and image-quality scoring.
 - Prediction logging to SQLite and CSV for audit-style reflection.
+- Correlation IDs, model version/hash logging, and request timing headers for API traceability.
+- Lightweight monitoring summary for review rate, validation warnings, quality pass rate, and class mix.
 - Committed evaluation artifacts: confusion matrices, ROC curve, threshold sweep, metrics CSV, and markdown report.
 - Model card documenting intended use, limitations, and responsible-use boundaries.
 
@@ -35,6 +37,8 @@ accuracy as the only measure of success.
 |   |-- app.py
 |   |-- diagnostic_core.py
 |   |-- deploy_cloudflare.py
+|   |-- middleware.py
+|   |-- schemas.py
 |   `-- malaria_cell_parasite_prediction_model.h5
 |-- reports/
 |   `-- evaluation/
@@ -46,6 +50,8 @@ accuracy as the only measure of success.
 |       |-- threshold_rationale.md
 |       `-- threshold_sweep.png
 |-- requirements.txt
+|-- tests/
+|   `-- test_core_safety.py
 `-- scripts/
     `-- evaluate_threshold.py
 ```
@@ -105,9 +111,11 @@ Shared behavior lives in `malaria_App/diagnostic_core.py`, including:
 - Preprocessing
 - Thresholding
 - Expert-review routing
+- Image-quality scoring
 - Grad-CAM generation
 - Activation-map generation
 - Prediction logging
+- Monitoring summaries
 
 This keeps the UI and API consistent: the same image should receive the same validation,
 threshold policy, review decision, and logging structure in both modes.
@@ -129,6 +137,8 @@ It checks:
 - Image dimensions are not dangerously large.
 - Image can be normalized into RGB format.
 - Unusual aspect ratio or small images are flagged as warnings.
+- Brightness, contrast, focus/detail, and saturation are measured.
+- Underexposed, overexposed, low-contrast, or low-detail images are flagged as warnings.
 
 Warnings can be routed into expert review through the Streamlit sidebar or API parameter.
 
@@ -165,6 +175,8 @@ Logged fields include:
 
 - UTC timestamp
 - Request ID
+- Correlation ID
+- Model version and model file hash
 - Inference source: Streamlit local or FastAPI
 - Predicted class
 - Raw uninfected score
@@ -174,9 +186,32 @@ Logged fields include:
 - Image hash and filename hash
 - Image dimensions and format
 - Validation warnings
+- Quality metrics: brightness, contrast, focus, saturation, and quality-pass flag
 - Grad-CAM layer
 
 The logger does not store raw images. Filenames are hashed rather than written directly.
+
+## Monitoring Snapshot
+
+The app and API expose a lightweight monitoring summary from recent local logs. This is not a
+production drift detector, but it demonstrates the observability hooks a healthcare AI system
+would need before serious deployment.
+
+Tracked summary fields include:
+
+- Total logged predictions
+- Expert-review rate
+- Validation-warning rate
+- Image-quality pass rate
+- Average focus score
+- Average brightness
+- Predicted class mix
+
+FastAPI endpoint:
+
+```bash
+curl http://127.0.0.1:8000/monitoring/summary
+```
 
 ## Explainability
 
@@ -262,7 +297,16 @@ curl -X POST http://127.0.0.1:8000/predict \
 ```
 
 The API returns prediction details, validation metadata, review routing, optional Grad-CAM images
-as base64 PNG data URIs, and logging status.
+as base64 PNG data URIs, model metadata, and logging status. The API also returns
+`X-Correlation-ID` and `X-Process-Time-Ms` headers for traceability.
+
+To pass your own correlation ID:
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "X-Correlation-ID: demo-case-001" \
+  -F "file=@sample_cell.png"
+```
 
 ## Reproduce Evaluation
 
@@ -274,6 +318,15 @@ python scripts/evaluate_threshold.py
 
 The script downloads the dataset ZIP if needed, caches predictions in ignored local files, and
 regenerates the evaluation report and figures under `reports/evaluation/`.
+
+## Run Tests
+
+```bash
+python -m pytest tests -q
+```
+
+The current tests cover input validation, image-quality warnings, near-threshold review routing,
+and API correlation-ID middleware.
 
 ## Responsible Use
 
@@ -291,4 +344,5 @@ medical data.
 - Add PR-AUC and confidence intervals for core metrics.
 - Add Grad-CAM examples for true positives, true negatives, false positives, and false negatives.
 - Add Docker support for a repeatable local deployment.
+- Add authenticated reviewer feedback capture for human-in-the-loop case review.
 - Evaluate on an external dataset or institutionally separate holdout set.

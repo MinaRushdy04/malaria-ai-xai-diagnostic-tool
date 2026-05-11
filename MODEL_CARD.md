@@ -57,13 +57,18 @@ reviewed alongside prediction errors and confidence calibration.
 - Grad-CAM is spatially coarse and may not precisely outline parasite structures.
 - Input validation checks file safety and structural suitability, not clinical appropriateness.
 - Prediction logs are for reflection and debugging; they are not a regulated audit system.
+- The image-quality gate uses simple brightness, contrast, and focus heuristics; it is not a replacement
+  for clinical specimen-quality review.
+- Monitoring summaries are local observability signals, not validated drift-detection infrastructure.
 
 ## Runtime Safeguards
 
 - Images are validated before inference for file type, decodability, size, dimensions, and RGB conversion.
+- Image quality is scored using brightness, contrast, focus/detail, and saturation heuristics.
 - Near-threshold predictions can be routed to expert review using a configurable review band.
 - Validation warnings can also trigger review routing.
 - Predictions can be logged to local SQLite and CSV files without storing the raw uploaded image.
+- Correlation IDs, model version, model hash, and request timing make API predictions easier to trace.
 
 ## Recommended Evaluation Before Any Serious Use
 

@@ -1,29 +1,39 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 
 try:
     from .diagnostic_core import (
         DEFAULT_REVIEW_MARGIN,
+        MODEL_VERSION,
         PARASITIZED_THRESHOLD,
         ImageValidationError,
         diagnose_image,
         load_keras_model,
+        model_sha256,
         package_to_api_payload,
+        summarize_logs,
         validate_image_bytes,
         write_prediction_log,
     )
+    from .middleware import CorrelationIdMiddleware
+    from .schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse
 except ImportError:
     from diagnostic_core import (
         DEFAULT_REVIEW_MARGIN,
+        MODEL_VERSION,
         PARASITIZED_THRESHOLD,
         ImageValidationError,
         diagnose_image,
         load_keras_model,
+        model_sha256,
         package_to_api_payload,
+        summarize_logs,
         validate_image_bytes,
         write_prediction_log,
     )
+    from middleware import CorrelationIdMiddleware
+    from schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse
 
 
 app = FastAPI(
@@ -34,6 +44,7 @@ app = FastAPI(
         "input validation, Grad-CAM, review routing, and prediction logging."
     ),
 )
+app.add_middleware(CorrelationIdMiddleware)
 
 
 _MODEL = None
@@ -49,20 +60,28 @@ def get_model():
     return _MODEL
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 def health():
     model, model_error = load_keras_model()
     return {
         "status": "ok" if model is not None and not model_error else "degraded",
         "model_loaded": model is not None and not model_error,
         "model_error": model_error,
+        "model_version": MODEL_VERSION,
+        "model_sha256": model_sha256(),
         "default_parasitized_threshold": PARASITIZED_THRESHOLD,
         "default_review_margin": DEFAULT_REVIEW_MARGIN,
     }
 
 
-@app.post("/predict")
+@app.get("/monitoring/summary", response_model=MonitoringSummaryResponse)
+def monitoring_summary(limit: int = 200):
+    return summarize_logs(limit=limit)
+
+
+@app.post("/predict", response_model=PredictionApiResponse)
 async def predict(
+    request: Request,
     file: UploadFile = File(...),
     threshold: float = Form(PARASITIZED_THRESHOLD),
     review_margin: float = Form(DEFAULT_REVIEW_MARGIN),
@@ -83,6 +102,7 @@ async def predict(
             include_xai=include_xai,
             include_activation=False,
             route_warnings_to_review=route_warnings_to_review,
+            correlation_id=request.state.correlation_id,
         )
     except ImageValidationError as exc:
         raise HTTPException(status_code=422, detail={"message": str(exc), "details": exc.details})
