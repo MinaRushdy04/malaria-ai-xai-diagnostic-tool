@@ -12,7 +12,7 @@ accuracy as the only measure of success.
 ## Project Highlights
 
 - Transfer-learning classifier built with TensorFlow/Keras and MobileNetV2.
-- Streamlit interface with local-model mode and FastAPI-service mode.
+- Streamlit dashboard with local-model mode and FastAPI-service mode.
 - FastAPI inference layer with `/health` and `/predict` endpoints.
 - Grad-CAM overlay for model attention, plus optional activation-map debug view.
 - Validation-based threshold rationale for the `Parasitized` class.
@@ -250,7 +250,7 @@ Evaluation artifacts:
 - [ROC curve](reports/evaluation/roc_curve.png)
 - [Metrics summary CSV](reports/evaluation/metrics_summary.csv)
 
-## Run The Streamlit App
+## Run The Streamlit Dashboard
 
 From the repository root:
 
@@ -268,6 +268,13 @@ The sidebar lets you choose:
 - Whether validation warnings should trigger review
 - Whether Grad-CAM and activation maps should run
 - Whether predictions should be logged
+
+The dashboard has four main views:
+
+- `Analysis Workbench`: upload a cell image, inspect quality checks, run inference, review Grad-CAM, and view telemetry.
+- `Monitoring`: inspect recent review rate, validation-warning rate, quality-pass rate, and class mix.
+- `Audit Log`: review recent local prediction records with correlation IDs and quality metrics.
+- `System Notes`: summarize what the system demonstrates and where its clinical boundaries are.
 
 ## Run The FastAPI Service
 

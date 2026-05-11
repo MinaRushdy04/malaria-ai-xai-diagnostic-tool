@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+import pandas as pd
 import requests
 import streamlit as st
 
@@ -20,6 +21,7 @@ try:
         validate_image_bytes,
         write_prediction_log,
     )
+    from .middleware import CORRELATION_ID_HEADER
 except ImportError:
     from diagnostic_core import (
         DEFAULT_REVIEW_MARGIN,
@@ -33,10 +35,11 @@ except ImportError:
         validate_image_bytes,
         write_prediction_log,
     )
+    from middleware import CORRELATION_ID_HEADER
 
 
 st.set_page_config(
-    page_title="Malaria AI Diagnostic Prototype",
+    page_title="Malaria AI Diagnostic Dashboard",
     page_icon="M",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -50,79 +53,87 @@ html, body, [class*="css"] {
     font-family: Inter, Segoe UI, system-ui, sans-serif;
 }
 .stApp {
-    background: #0b1117;
-    color: #e5edf5;
+    background: #0f1419;
+    color: #e6edf3;
 }
 #MainMenu, footer, header {
     visibility: hidden;
 }
-.main-title {
-    font-size: 2.25rem;
-    font-weight: 760;
-    letter-spacing: 0;
-    color: #f8fafc;
-    margin-bottom: 0.25rem;
+.block-container {
+    padding-top: 1.4rem;
+    padding-bottom: 2rem;
 }
-.subtle {
+.dashboard-header {
+    border-bottom: 1px solid #26323d;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+.dashboard-title {
+    font-size: 2rem;
+    font-weight: 760;
+    color: #f8fafc;
+    letter-spacing: 0;
+    margin: 0;
+}
+.dashboard-subtitle {
     color: #9aa8b6;
-    font-size: 0.96rem;
+    font-size: 0.98rem;
     line-height: 1.55;
+    margin-top: 0.35rem;
 }
 .section-label {
-    color: #8fd3c7;
+    color: #78d5c3;
     text-transform: uppercase;
     letter-spacing: 0.08rem;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 760;
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.45rem;
 }
 .panel {
-    background: #111a22;
-    border: 1px solid #22303d;
+    background: #151d24;
+    border: 1px solid #273441;
     border-radius: 8px;
-    padding: 1.1rem 1.15rem;
-    margin-bottom: 1rem;
+    padding: 1rem 1.05rem;
+    margin-bottom: 0.85rem;
 }
-.result-card {
-    border-radius: 8px;
-    padding: 1.15rem 1.2rem;
-    border: 1px solid;
-    margin-bottom: 1rem;
+.compact-text {
+    color: #a9b6c3;
+    font-size: 0.9rem;
+    line-height: 1.55;
 }
 .result-positive {
-    background: rgba(185, 28, 28, 0.16);
-    border-color: rgba(248, 113, 113, 0.45);
+    background: rgba(185, 28, 28, 0.13);
+    border: 1px solid rgba(248, 113, 113, 0.42);
+    border-radius: 8px;
+    padding: 1rem;
 }
 .result-negative {
-    background: rgba(21, 128, 61, 0.14);
-    border-color: rgba(74, 222, 128, 0.38);
-}
-.review-card {
-    background: rgba(217, 119, 6, 0.15);
-    border: 1px solid rgba(251, 191, 36, 0.45);
+    background: rgba(21, 128, 61, 0.13);
+    border: 1px solid rgba(74, 222, 128, 0.36);
     border-radius: 8px;
-    padding: 0.95rem 1rem;
-    margin-bottom: 1rem;
+    padding: 1rem;
 }
-.clear-card {
+.review-callout {
+    background: rgba(217, 119, 6, 0.14);
+    border: 1px solid rgba(251, 191, 36, 0.42);
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    margin-top: 0.75rem;
+}
+.clear-callout {
     background: rgba(14, 165, 233, 0.10);
     border: 1px solid rgba(56, 189, 248, 0.28);
     border-radius: 8px;
-    padding: 0.95rem 1rem;
-    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    margin-top: 0.75rem;
 }
-.metric-caption {
-    color: #9aa8b6;
-    font-size: 0.82rem;
-}
-.small-code {
-    font-family: Consolas, monospace;
-    color: #c7d2fe;
-    font-size: 0.82rem;
+.small-muted {
+    color: #8b9aaa;
+    font-size: 0.8rem;
 }
 [data-testid="stFileUploaderDropzone"] {
-    background: #0f1720 !important;
-    border: 1px dashed #3a4a5a !important;
+    background: #111820 !important;
+    border: 1px dashed #415161 !important;
     border-radius: 8px !important;
 }
 </style>
@@ -146,10 +157,13 @@ def post_to_api(
     include_xai: bool,
     route_warnings_to_review: bool,
     enable_logging: bool,
+    correlation_id: str | None,
 ) -> dict[str, Any]:
     endpoint = api_url.rstrip("/") + "/predict"
+    headers = {CORRELATION_ID_HEADER: correlation_id} if correlation_id else {}
     response = requests.post(
         endpoint,
+        headers=headers,
         files={"file": (filename, uploaded_bytes, content_type or "application/octet-stream")},
         data={
             "threshold": str(threshold),
@@ -166,20 +180,49 @@ def post_to_api(
         except ValueError:
             detail = response.text
         raise RuntimeError(f"API returned HTTP {response.status_code}: {detail}")
-    return response.json()
+    payload = response.json()
+    payload["response_headers"] = {
+        CORRELATION_ID_HEADER: response.headers.get(CORRELATION_ID_HEADER),
+        "X-Process-Time-Ms": response.headers.get("X-Process-Time-Ms"),
+    }
+    return payload
+
+
+def render_header() -> None:
+    st.markdown(
+        """
+        <div class="dashboard-header">
+            <div class="dashboard-title">Malaria Cell-Smear AI Dashboard</div>
+            <div class="dashboard-subtitle">
+                Threshold-aware inference, input quality checks, expert-review routing,
+                Grad-CAM explainability, and audit-style monitoring in one workflow.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_status_strip(settings: dict[str, Any]) -> None:
+    cols = st.columns(4)
+    cols[0].metric("Inference mode", settings["inference_mode"])
+    cols[1].metric("Threshold", f"{settings['threshold']:.3f}")
+    cols[2].metric("Review band", f"+/- {settings['review_margin']:.3f}")
+    cols[3].metric("Logging", "On" if settings["enable_logging"] else "Off")
 
 
 def render_prediction(prediction: dict[str, Any]) -> None:
     predicted_class = prediction["predicted_class"]
-    result_class = "result-positive" if predicted_class == "Parasitized" else "result-negative"
-    result_title = "Parasitized screening flag" if predicted_class == "Parasitized" else "Uninfected screening result"
+    positive = predicted_class == "Parasitized"
+    css_class = "result-positive" if positive else "result-negative"
+    title = "Parasitized screening flag" if positive else "Uninfected screening result"
 
     st.markdown(
         f"""
-        <div class="result-card {result_class}">
-            <div class="section-label">Model output</div>
-            <h2 style="margin:0 0 0.45rem 0;color:#f8fafc;">{result_title}</h2>
-            <div class="subtle">{prediction["recommendation"]}</div>
+        <div class="{css_class}">
+            <div class="section-label">Decision support output</div>
+            <h3 style="margin:0 0 0.45rem 0;color:#f8fafc;">{title}</h3>
+            <div class="compact-text">{prediction["recommendation"]}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -187,9 +230,10 @@ def render_prediction(prediction: dict[str, Any]) -> None:
 
     metric_cols = st.columns(4)
     metric_cols[0].metric("Parasitized score", f"{prediction['parasitized_score']:.3f}")
-    metric_cols[1].metric("Threshold", f"{prediction['threshold']:.3f}")
-    metric_cols[2].metric("Distance", f"{prediction['decision_margin']:.3f}")
-    metric_cols[3].metric("Class score", f"{prediction['prediction_score']:.3f}")
+    metric_cols[1].metric("Class score", f"{prediction['prediction_score']:.3f}")
+    metric_cols[2].metric("Distance to threshold", f"{prediction['decision_margin']:.3f}")
+    metric_cols[3].metric("Review margin", f"{prediction['review_margin']:.3f}")
+
     st.progress(
         min(max(float(prediction["parasitized_score"]), 0.0), 1.0),
         text="Parasitized score",
@@ -198,9 +242,9 @@ def render_prediction(prediction: dict[str, Any]) -> None:
     if prediction["review_required"]:
         st.markdown(
             f"""
-            <div class="review-card">
+            <div class="review-callout">
                 <strong>Expert review required</strong><br>
-                <span class="subtle">{prediction["review_reason"]}</span>
+                <span class="compact-text">{prediction["review_reason"]}</span>
             </div>
             """,
             unsafe_allow_html=True,
@@ -208,18 +252,32 @@ def render_prediction(prediction: dict[str, Any]) -> None:
     else:
         st.markdown(
             f"""
-            <div class="clear-card">
+            <div class="clear-callout">
                 <strong>Outside configured review band</strong><br>
-                <span class="subtle">{prediction["review_reason"]}</span>
+                <span class="compact-text">{prediction["review_reason"]}</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
 
-def render_validation(validation: dict[str, Any]) -> None:
-    with st.expander("Input validation details", expanded=False):
-        quality = validation.get("quality") or {}
+def render_quality_gate(validation: dict[str, Any]) -> None:
+    quality = validation.get("quality") or {}
+    warnings = validation.get("warnings") or []
+
+    st.markdown('<div class="section-label">Input quality gate</div>', unsafe_allow_html=True)
+    cols = st.columns(4)
+    cols[0].metric("Brightness", f"{quality.get('brightness_mean', 0.0):.1f}")
+    cols[1].metric("Contrast", f"{quality.get('contrast_std', 0.0):.1f}")
+    cols[2].metric("Focus score", f"{quality.get('focus_score', 0.0):.1f}")
+    cols[3].metric("Gate", "Pass" if quality.get("passed") else "Review")
+
+    if warnings:
+        st.warning(" ".join(warnings))
+    else:
+        st.success("No validation or quality warnings.")
+
+    with st.expander("Validation metadata", expanded=False):
         st.write(
             {
                 "format": validation["format"],
@@ -229,37 +287,20 @@ def render_validation(validation: dict[str, Any]) -> None:
                 "file_extension": validation["file_extension"],
                 "content_sha256": validation["content_sha256"],
                 "filename_hash": validation["filename_hash"],
+                "quality": quality,
             }
         )
-        quality_cols = st.columns(4)
-        quality_cols[0].metric("Brightness", f"{quality.get('brightness_mean', 0.0):.1f}")
-        quality_cols[1].metric("Contrast", f"{quality.get('contrast_std', 0.0):.1f}")
-        quality_cols[2].metric("Focus score", f"{quality.get('focus_score', 0.0):.1f}")
-        quality_cols[3].metric("Quality gate", "Pass" if quality.get("passed") else "Review")
-
-        warnings = validation.get("warnings") or []
-        if warnings:
-            st.warning(" ".join(warnings))
-        else:
-            st.success("No validation warnings.")
-
-        st.markdown(
-            """
-            The validation layer checks that the upload is a supported static image, can be
-            decoded safely, is not empty or oversized, has usable dimensions, and can be
-            normalized to RGB before inference. The quality gate adds brightness, contrast,
-            and focus checks. It does not prove the image is clinically appropriate;
-            questionable inputs are routed to review instead of being silently trusted.
-            """
+        st.caption(
+            "This validates technical suitability for the model pipeline. It is not a clinical "
+            "specimen-quality assessment."
         )
 
 
-def render_xai_from_local(package) -> None:
-    st.markdown('<div class="section-label">Explainability</div>', unsafe_allow_html=True)
+def render_xai_local(package) -> None:
     if package.overlay_image and package.heatmap_image:
-        left, right = st.columns(2)
-        left.image(package.overlay_image, caption="Grad-CAM overlay", width="stretch")
-        right.image(package.heatmap_image, caption="Raw Grad-CAM heatmap", width="stretch")
+        cols = st.columns(2)
+        cols[0].image(package.overlay_image, caption="Grad-CAM overlay", width="stretch")
+        cols[1].image(package.heatmap_image, caption="Raw heatmap", width="stretch")
     elif package.xai_error:
         st.warning(f"Grad-CAM could not be generated: {package.xai_error}")
     else:
@@ -272,227 +313,312 @@ def render_xai_from_local(package) -> None:
                 caption=f"Top feature channels from {package.activation_layer}",
                 width="stretch",
             )
-            st.caption("Feature maps are useful for technical inspection, not clinical proof.")
+            st.caption("Feature maps are for technical inspection, not clinical proof.")
 
 
-def render_xai_from_api(payload: dict[str, Any]) -> None:
-    st.markdown('<div class="section-label">Explainability</div>', unsafe_allow_html=True)
+def render_xai_api(payload: dict[str, Any]) -> None:
     xai = payload.get("xai") or {}
     overlay = xai.get("gradcam_overlay")
     heatmap = xai.get("heatmap")
     if overlay and heatmap:
-        left, right = st.columns(2)
-        left.image(data_uri_to_image(overlay), caption="Grad-CAM overlay", width="stretch")
-        right.image(data_uri_to_image(heatmap), caption="Raw Grad-CAM heatmap", width="stretch")
+        cols = st.columns(2)
+        cols[0].image(data_uri_to_image(overlay), caption="Grad-CAM overlay", width="stretch")
+        cols[1].image(data_uri_to_image(heatmap), caption="Raw heatmap", width="stretch")
     elif xai.get("xai_error"):
         st.warning(f"Grad-CAM could not be generated: {xai['xai_error']}")
     else:
         st.info("Grad-CAM disabled for this run.")
 
 
-def render_recent_logs() -> None:
-    rows = read_recent_logs(limit=12)
+def log_rows(limit: int = 100) -> list[dict[str, Any]]:
+    return read_recent_logs(limit=limit)
+
+
+def logs_dataframe(limit: int = 100) -> pd.DataFrame:
+    rows = log_rows(limit=limit)
     if not rows:
-        st.caption("No local prediction logs yet.")
-        return
+        return pd.DataFrame()
 
-    display_rows = [
-        {
-            "time": row["timestamp_utc"],
-            "source": row["source"],
-            "correlation": (row.get("correlation_id") or "")[:8],
-            "class": row["predicted_class"],
-            "score": round(float(row["parasitized_score"]), 3),
-            "threshold": round(float(row["threshold"]), 3),
-            "review": bool(int(row["review_required"])),
-            "focus": round(float(row.get("quality_focus_score") or 0.0), 1),
-        }
-        for row in rows
-    ]
-    st.dataframe(display_rows, width="stretch", hide_index=True)
+    display_rows = []
+    for row in rows:
+        display_rows.append(
+            {
+                "time": row.get("timestamp_utc"),
+                "source": row.get("source"),
+                "correlation": (row.get("correlation_id") or "")[:12],
+                "class": row.get("predicted_class"),
+                "score": round(float(row.get("parasitized_score") or 0.0), 3),
+                "threshold": round(float(row.get("threshold") or 0.0), 3),
+                "review": str(row.get("review_required")).lower() in {"1", "true"},
+                "quality_pass": str(row.get("quality_passed")).lower() in {"1", "true"},
+                "focus": round(float(row.get("quality_focus_score") or 0.0), 1),
+            }
+        )
+    return pd.DataFrame(display_rows)
 
 
-def render_monitoring_snapshot() -> None:
+def render_monitoring() -> None:
     summary = summarize_logs(limit=200)
-    if summary["total_predictions"] == 0:
-        st.caption("Monitoring snapshot appears after local predictions are logged.")
-        return
-
-    cols = st.columns(2)
-    cols[0].metric("Logged predictions", summary["total_predictions"])
+    cols = st.columns(6)
+    cols[0].metric("Predictions", summary["total_predictions"])
     cols[1].metric("Review rate", f"{summary['review_rate'] * 100:.1f}%")
-    cols = st.columns(2)
-    cols[0].metric("Quality pass rate", f"{summary['quality_pass_rate'] * 100:.1f}%")
-    cols[1].metric("Warning rate", f"{summary['validation_warning_rate'] * 100:.1f}%")
-    st.caption(
-        f"Average focus {summary['avg_focus_score']:.1f}; "
-        f"average brightness {summary['avg_brightness']:.1f}; "
-        f"class mix {summary['class_counts']}"
+    cols[2].metric("Warning rate", f"{summary['validation_warning_rate'] * 100:.1f}%")
+    cols[3].metric("Quality pass", f"{summary['quality_pass_rate'] * 100:.1f}%")
+    cols[4].metric("Avg focus", f"{summary['avg_focus_score']:.1f}")
+    cols[5].metric("Avg brightness", f"{summary['avg_brightness']:.1f}")
+
+    left, right = st.columns([0.9, 1.1], gap="large")
+    with left:
+        st.markdown('<div class="section-label">Class mix</div>', unsafe_allow_html=True)
+        if summary["class_counts"]:
+            st.bar_chart(pd.DataFrame.from_dict(summary["class_counts"], orient="index", columns=["count"]))
+        else:
+            st.info("Class mix appears after predictions are logged.")
+    with right:
+        st.markdown('<div class="section-label">Recent audit rows</div>', unsafe_allow_html=True)
+        frame = logs_dataframe(limit=12)
+        if frame.empty:
+            st.info("No local prediction logs yet.")
+        else:
+            st.dataframe(frame, width="stretch", hide_index=True)
+
+
+def render_audit_log() -> None:
+    frame = logs_dataframe(limit=100)
+    if frame.empty:
+        st.info("No local audit records yet. Enable logging and run an inference first.")
+        return
+    st.dataframe(frame, width="stretch", hide_index=True)
+    st.caption("Logs are local SQLite/CSV records. Raw uploaded images are not stored.")
+
+
+def render_system_notes() -> None:
+    st.markdown("#### What this dashboard demonstrates")
+    st.markdown(
+        """
+        - A Streamlit decision-support interface connected to shared inference logic.
+        - A FastAPI-compatible architecture for separating frontend and backend concerns.
+        - Validation and quality checks before model inference.
+        - Configurable threshold and expert-review routing.
+        - Grad-CAM explainability and activation-map inspection.
+        - Local audit logs with correlation IDs, model hash, and quality metrics.
+        """
+    )
+    st.markdown("#### Boundaries")
+    st.markdown(
+        """
+        - This is an academic prototype, not clinical software.
+        - The dataset contains cropped cell images, not full-slide patient-level microscopy.
+        - Grad-CAM shows model attention, not medical causality.
+        - Quality scoring is heuristic and does not replace expert specimen review.
+        """
     )
 
 
-st.markdown('<div class="main-title">Malaria Cell-Smear AI Diagnostic Prototype</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="subtle">Responsible AI workflow with threshold-aware inference, Grad-CAM, review routing, input validation, and prediction logging.</div>',
-    unsafe_allow_html=True,
+def sidebar_settings() -> dict[str, Any]:
+    with st.sidebar:
+        st.header("System Controls")
+        inference_mode = st.radio("Inference mode", ["Local model", "FastAPI service"], index=0)
+        threshold = st.slider(
+            "Parasitized threshold",
+            min_value=0.05,
+            max_value=0.95,
+            value=float(PARASITIZED_THRESHOLD),
+            step=0.005,
+            help="Default comes from the validation threshold sweep.",
+        )
+        review_margin = st.slider(
+            "Expert-review band",
+            min_value=0.0,
+            max_value=0.25,
+            value=float(DEFAULT_REVIEW_MARGIN),
+            step=0.005,
+            help="Cases within this distance of the threshold are routed to review.",
+        )
+        st.divider()
+        route_warnings_to_review = st.checkbox("Route validation warnings to review", value=True)
+        include_xai = st.checkbox("Generate Grad-CAM", value=True)
+        include_activation = st.checkbox("Show activation debug maps", value=False)
+        enable_logging = st.checkbox("Write prediction log", value=True)
+        correlation_id = st.text_input(
+            "Correlation ID",
+            value="",
+            placeholder="Optional case/session id",
+            help="Passed to FastAPI as X-Correlation-ID, or stored in local telemetry if provided.",
+        ).strip()
+
+        api_url = os.environ.get("MALARIA_API_URL", "http://127.0.0.1:8000")
+        if inference_mode == "FastAPI service":
+            st.divider()
+            api_url = st.text_input("API URL", value=api_url)
+            if st.button("Check API health", width="stretch"):
+                try:
+                    health = requests.get(api_url.rstrip("/") + "/health", timeout=10).json()
+                    st.success(f"API status: {health.get('status')}")
+                    st.caption(f"Model: {health.get('model_version')}")
+                except Exception as exc:
+                    st.error(f"Health check failed: {exc}")
+            st.caption("Start API: uvicorn malaria_App.api:app --reload")
+
+    return {
+        "inference_mode": inference_mode,
+        "threshold": threshold,
+        "review_margin": review_margin,
+        "route_warnings_to_review": route_warnings_to_review,
+        "include_xai": include_xai,
+        "include_activation": include_activation,
+        "enable_logging": enable_logging,
+        "correlation_id": correlation_id or None,
+        "api_url": api_url,
+    }
+
+
+def run_local_inference(validated, settings: dict[str, Any]):
+    model, model_error = load_model_cached()
+    if model_error:
+        st.error(model_error)
+        st.stop()
+
+    package = diagnose_image(
+        model,
+        validated,
+        threshold=settings["threshold"],
+        review_margin=settings["review_margin"],
+        include_xai=settings["include_xai"],
+        include_activation=settings["include_activation"],
+        route_warnings_to_review=settings["route_warnings_to_review"],
+        correlation_id=settings["correlation_id"],
+    )
+    log_status = (
+        write_prediction_log(package, source="streamlit-local")
+        if settings["enable_logging"]
+        else {"enabled": False}
+    )
+    return package, log_status
+
+
+def run_api_inference(uploaded_file, uploaded_bytes: bytes, settings: dict[str, Any]) -> dict[str, Any]:
+    return post_to_api(
+        api_url=settings["api_url"],
+        uploaded_bytes=uploaded_bytes,
+        filename=uploaded_file.name,
+        content_type=uploaded_file.type,
+        threshold=settings["threshold"],
+        review_margin=settings["review_margin"],
+        include_xai=settings["include_xai"],
+        route_warnings_to_review=settings["route_warnings_to_review"],
+        enable_logging=settings["enable_logging"],
+        correlation_id=settings["correlation_id"],
+    )
+
+
+render_header()
+settings = sidebar_settings()
+render_status_strip(settings)
+
+analysis_tab, monitoring_tab, audit_tab, notes_tab = st.tabs(
+    ["Analysis Workbench", "Monitoring", "Audit Log", "System Notes"]
 )
 
-with st.sidebar:
-    st.header("Run settings")
-    inference_mode = st.radio("Inference mode", ["Local model", "FastAPI service"], index=0)
-    threshold = st.slider(
-        "Parasitized threshold",
-        min_value=0.05,
-        max_value=0.95,
-        value=float(PARASITIZED_THRESHOLD),
-        step=0.005,
-        help="Default comes from the validation threshold sweep.",
-    )
-    review_margin = st.slider(
-        "Expert-review band",
-        min_value=0.0,
-        max_value=0.25,
-        value=float(DEFAULT_REVIEW_MARGIN),
-        step=0.005,
-        help="Cases within this distance of the threshold are routed to review.",
-    )
-    route_warnings_to_review = st.checkbox("Route validation warnings to review", value=True)
-    include_xai = st.checkbox("Generate Grad-CAM", value=True)
-    include_activation = st.checkbox("Show activation debug maps", value=False)
-    enable_logging = st.checkbox("Write prediction log", value=True)
+with analysis_tab:
+    input_col, output_col = st.columns([0.85, 1.15], gap="large")
 
-    api_url = os.environ.get("MALARIA_API_URL", "http://127.0.0.1:8000")
-    if inference_mode == "FastAPI service":
-        api_url = st.text_input("API URL", value=api_url)
-        if st.button("Check API health"):
-            try:
-                health = requests.get(api_url.rstrip("/") + "/health", timeout=10).json()
-                st.success(health)
-            except Exception as exc:
-                st.error(f"Health check failed: {exc}")
-        st.caption("Start the service with: uvicorn malaria_App.api:app --reload")
-
-    with st.expander("Monitoring snapshot", expanded=False):
-        render_monitoring_snapshot()
-
-    with st.expander("Recent local logs", expanded=False):
-        render_recent_logs()
-
-
-left_col, right_col = st.columns([0.95, 1.15], gap="large")
-
-with left_col:
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="section-label">Input</div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
-        "Upload a cropped thin-smear cell image",
-        type=["jpg", "jpeg", "png"],
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    if uploaded_file is not None:
-        uploaded_bytes = uploaded_file.getvalue()
-        try:
-            validated = validate_image_bytes(uploaded_bytes, filename=uploaded_file.name)
-        except ImageValidationError as exc:
-            st.error(str(exc))
-            with st.expander("Validation errors", expanded=True):
-                st.write(exc.details)
-            st.stop()
-
-        st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.markdown('<div class="section-label">Preview</div>', unsafe_allow_html=True)
-        st.image(validated.image, width="stretch")
-        st.markdown(
-            f'<div class="metric-caption">{validated.metadata.width} x {validated.metadata.height} px, {validated.metadata.format}</div>',
-            unsafe_allow_html=True,
+    with input_col:
+        st.markdown('<div class="section-label">Case input</div>', unsafe_allow_html=True)
+        uploaded_file = st.file_uploader(
+            "Upload a cropped thin-smear cell image",
+            type=["jpg", "jpeg", "png"],
         )
-        st.markdown("</div>", unsafe_allow_html=True)
-        render_validation(validated.metadata.to_dict())
-    else:
-        st.info("Upload an image to run the diagnostic workflow.")
 
-with right_col:
-    if uploaded_file is None:
-        st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.markdown('<div class="section-label">Output</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="subtle">Inference, review routing, Grad-CAM, and telemetry will appear here after an image is uploaded.</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-    elif inference_mode == "Local model":
-        with st.spinner("Loading local model and running inference..."):
-            model, model_error = load_model_cached()
-            if model_error:
-                st.error(model_error)
-                st.stop()
-
-            package = diagnose_image(
-                model,
-                validated,
-                threshold=threshold,
-                review_margin=review_margin,
-                include_xai=include_xai,
-                include_activation=include_activation,
-                route_warnings_to_review=route_warnings_to_review,
-            )
-            log_status = write_prediction_log(package, source="streamlit-local") if enable_logging else {"enabled": False}
-
-        render_prediction(package.result.to_dict())
-        render_xai_from_local(package)
-
-        with st.expander("Technical telemetry", expanded=False):
-            st.write(
-                {
-                    "request_id": package.result.request_id,
-                    "correlation_id": package.result.correlation_id,
-                    "model_version": package.result.model_version,
-                    "model_sha256": package.result.model_sha256,
-                    "tensor_shape": package.tensor_shape,
-                    "raw_uninfected_score": package.result.raw_uninfected_score,
-                    "parasitized_score": package.result.parasitized_score,
-                    "quality": package.validation.quality.to_dict(),
-                    "gradcam_layer": package.result.gradcam_layer,
-                    "logging": log_status,
-                }
-            )
-
-    else:
-        with st.spinner("Calling FastAPI inference service..."):
+        if uploaded_file is not None:
+            uploaded_bytes = uploaded_file.getvalue()
             try:
-                payload = post_to_api(
-                    api_url=api_url,
-                    uploaded_bytes=uploaded_bytes,
-                    filename=uploaded_file.name,
-                    content_type=uploaded_file.type,
-                    threshold=threshold,
-                    review_margin=review_margin,
-                    include_xai=include_xai,
-                    route_warnings_to_review=route_warnings_to_review,
-                    enable_logging=enable_logging,
-                )
-            except Exception as exc:
+                validated = validate_image_bytes(uploaded_bytes, filename=uploaded_file.name)
+            except ImageValidationError as exc:
                 st.error(str(exc))
+                with st.expander("Validation errors", expanded=True):
+                    st.write(exc.details)
                 st.stop()
 
-        render_prediction(payload["prediction"])
-        render_xai_from_api(payload)
+            st.image(validated.image, caption="Uploaded sample", width="stretch")
+            render_quality_gate(validated.metadata.to_dict())
+        else:
+            st.info("Upload an image to run validation, inference, explainability, and logging.")
+            validated = None
+            uploaded_bytes = None
 
-        with st.expander("Technical telemetry", expanded=False):
-            st.write(
-                {
-                    "request_id": payload["prediction"]["request_id"],
-                    "correlation_id": payload["prediction"]["correlation_id"],
-                    "model": payload.get("model"),
-                    "tensor_shape": payload["tensor_shape"],
-                    "validation": payload["validation"],
-                    "logging": payload.get("logging"),
-                    "api_url": api_url,
-                }
+    with output_col:
+        st.markdown('<div class="section-label">Case analysis</div>', unsafe_allow_html=True)
+        if uploaded_file is None or validated is None or uploaded_bytes is None:
+            st.markdown(
+                """
+                <div class="panel">
+                    <div class="compact-text">
+                        The analysis workspace will show the model output, review routing,
+                        Grad-CAM, and telemetry once a sample is uploaded.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
+        elif settings["inference_mode"] == "Local model":
+            with st.spinner("Running local model inference..."):
+                package, log_status = run_local_inference(validated, settings)
 
+            render_prediction(package.result.to_dict())
+            st.divider()
+            st.markdown('<div class="section-label">Explainability</div>', unsafe_allow_html=True)
+            render_xai_local(package)
+            with st.expander("Technical telemetry", expanded=False):
+                st.write(
+                    {
+                        "request_id": package.result.request_id,
+                        "correlation_id": package.result.correlation_id,
+                        "model_version": package.result.model_version,
+                        "model_sha256": package.result.model_sha256,
+                        "tensor_shape": package.tensor_shape,
+                        "raw_uninfected_score": package.result.raw_uninfected_score,
+                        "parasitized_score": package.result.parasitized_score,
+                        "quality": package.validation.quality.to_dict(),
+                        "gradcam_layer": package.result.gradcam_layer,
+                        "logging": log_status,
+                    }
+                )
+        else:
+            with st.spinner("Calling FastAPI inference service..."):
+                try:
+                    payload = run_api_inference(uploaded_file, uploaded_bytes, settings)
+                except Exception as exc:
+                    st.error(str(exc))
+                    st.stop()
+
+            render_prediction(payload["prediction"])
+            st.divider()
+            st.markdown('<div class="section-label">Explainability</div>', unsafe_allow_html=True)
+            render_xai_api(payload)
+            with st.expander("Technical telemetry", expanded=False):
+                st.write(
+                    {
+                        "request_id": payload["prediction"]["request_id"],
+                        "correlation_id": payload["prediction"]["correlation_id"],
+                        "headers": payload.get("response_headers"),
+                        "model": payload.get("model"),
+                        "tensor_shape": payload["tensor_shape"],
+                        "validation": payload["validation"],
+                        "logging": payload.get("logging"),
+                        "api_url": settings["api_url"],
+                    }
+                )
+
+with monitoring_tab:
+    render_monitoring()
+
+with audit_tab:
+    render_audit_log()
+
+with notes_tab:
+    render_system_notes()
 
 st.caption(
-    "Research and educational use only. This is not medical advice, not a clinical diagnostic device, and not intended for patient care."
+    "Research and educational use only. Not medical advice, not a clinical diagnostic device, and not intended for patient care."
 )
