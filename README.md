@@ -1,19 +1,24 @@
 # Malaria Cell-Smear AI Diagnostic Prototype
 
-An academic AI-in-healthcare project for classifying thin-smear microscopy cell images as
-`Parasitized` or `Uninfected`, with Grad-CAM explainability and explicit threshold evaluation.
+An academic AI-in-healthcare project for classifying cropped thin-smear microscopy cell images
+as `Parasitized` or `Uninfected`. The project emphasizes responsible integration: prediction,
+threshold selection, explainability, validation, expert-review routing, and logging are treated
+as part of the system rather than as afterthoughts.
 
-This is not a production medical device. The project is designed to demonstrate responsible
-AI integration in healthcare: prediction, confidence, explainability, threshold choice, and
-limitations are presented together instead of treating accuracy as the only success measure.
+This is not a production medical device. It is a research and education prototype designed to
+show how an AI model can be wrapped in safer decision-support behavior instead of presenting
+accuracy as the only measure of success.
 
 ## Project Highlights
 
 - Transfer-learning classifier built with TensorFlow/Keras and MobileNetV2.
-- Streamlit web app for uploading microscopy cell images.
-- Grad-CAM overlay showing image regions that contributed most to the prediction.
-- Optional activation-map debug view for inspecting MobileNetV2 feature channels.
+- Streamlit interface with local-model mode and FastAPI-service mode.
+- FastAPI inference layer with `/health` and `/predict` endpoints.
+- Grad-CAM overlay for model attention, plus optional activation-map debug view.
 - Validation-based threshold rationale for the `Parasitized` class.
+- Flexible expert-review routing for near-threshold or validation-warning cases.
+- Input validation before inference: file type, decodability, size, dimensions, static image check, and RGB normalization.
+- Prediction logging to SQLite and CSV for audit-style reflection.
 - Committed evaluation artifacts: confusion matrices, ROC curve, threshold sweep, metrics CSV, and markdown report.
 - Model card documenting intended use, limitations, and responsible-use boundaries.
 
@@ -21,25 +26,31 @@ limitations are presented together instead of treating accuracy as the only succ
 
 ```text
 .
-├── Diagnosis_model.ipynb
-├── MODEL_CARD.md
-├── README.md
-├── malaria_App/
-│   ├── app.py
-│   ├── deploy_cloudflare.py
-│   └── malaria_cell_parasite_prediction_model.h5
-├── reports/
-│   └── evaluation/
-│       ├── confusion_matrix_default_threshold.png
-│       ├── confusion_matrix_selected_threshold.png
-│       ├── metrics_summary.csv
-│       ├── roc_curve.png
-│       ├── threshold_rationale.md
-│       └── threshold_sweep.png
-├── requirements.txt
-└── scripts/
-    └── evaluate_threshold.py
+|-- Diagnosis_model.ipynb
+|-- MODEL_CARD.md
+|-- README.md
+|-- malaria_App/
+|   |-- __init__.py
+|   |-- api.py
+|   |-- app.py
+|   |-- diagnostic_core.py
+|   |-- deploy_cloudflare.py
+|   `-- malaria_cell_parasite_prediction_model.h5
+|-- reports/
+|   `-- evaluation/
+|       |-- confusion_matrix_default_threshold.png
+|       |-- confusion_matrix_selected_threshold.png
+|       |-- evaluation_summary.json
+|       |-- metrics_summary.csv
+|       |-- roc_curve.png
+|       |-- threshold_rationale.md
+|       `-- threshold_sweep.png
+|-- requirements.txt
+`-- scripts/
+    `-- evaluate_threshold.py
 ```
+
+Runtime logs are written under `logs/`, which is ignored by Git.
 
 ## Dataset
 
@@ -77,20 +88,110 @@ The saved model is included at:
 malaria_App/malaria_cell_parasite_prediction_model.h5
 ```
 
+## System Design
+
+The project has two inference paths that share the same core logic:
+
+```text
+Streamlit UI
+    |-- Local model mode --> diagnostic_core.py --> TensorFlow model
+    `-- API mode ---------> FastAPI /predict --> diagnostic_core.py --> TensorFlow model
+```
+
+Shared behavior lives in `malaria_App/diagnostic_core.py`, including:
+
+- Model loading
+- Input validation
+- Preprocessing
+- Thresholding
+- Expert-review routing
+- Grad-CAM generation
+- Activation-map generation
+- Prediction logging
+
+This keeps the UI and API consistent: the same image should receive the same validation,
+threshold policy, review decision, and logging structure in both modes.
+
+## Input Validation
+
+The validation layer is a practical safety layer before model inference. It does not prove that
+an image is clinically appropriate, but it prevents unsafe or unsuitable files from being silently
+processed.
+
+It checks:
+
+- File is not empty.
+- File size is below the configured upload limit.
+- Extension is one of `.jpg`, `.jpeg`, or `.png`.
+- The file can actually be decoded as an image.
+- Encoding is static JPEG or PNG, not an animated image.
+- Image dimensions are not too small for meaningful resizing.
+- Image dimensions are not dangerously large.
+- Image can be normalized into RGB format.
+- Unusual aspect ratio or small images are flagged as warnings.
+
+Warnings can be routed into expert review through the Streamlit sidebar or API parameter.
+
+## Expert-Review Routing
+
+The default decision threshold is `0.285` for the `Parasitized` score. It was selected from the
+validation threshold sweep, not guessed from a generic `0.5` cutoff.
+
+The app also defines a configurable review band around the threshold. By default, cases within
+`0.075` of the threshold are marked as requiring expert review.
+
+Example:
+
+```text
+threshold = 0.285
+review_margin = 0.075
+review range = 0.210 to 0.360
+```
+
+Any case in that range is treated as uncertain enough for human review. This is intentionally
+flexible: the user can widen or narrow the review band in Streamlit, and API callers can pass
+`review_margin` per request.
+
+## Logging
+
+If logging is enabled, each prediction writes a row to:
+
+```text
+logs/predictions.sqlite3
+logs/predictions.csv
+```
+
+Logged fields include:
+
+- UTC timestamp
+- Request ID
+- Inference source: Streamlit local or FastAPI
+- Predicted class
+- Raw uninfected score
+- Derived parasitized score
+- Threshold and review margin
+- Review-required flag and reason
+- Image hash and filename hash
+- Image dimensions and format
+- Validation warnings
+- Grad-CAM layer
+
+The logger does not store raw images. Filenames are hashed rather than written directly.
+
 ## Explainability
 
-The Streamlit app generates a Grad-CAM heatmap for the predicted class and overlays it on the
-uploaded image.
+The app generates a Grad-CAM heatmap for the predicted class and overlays it on the uploaded
+image.
 
 Interpretation guidance:
 
 - Bright regions contributed more strongly to the model's prediction.
 - Grad-CAM shows model attention, not medical causality.
 - A plausible heatmap does not prove the diagnosis is correct.
-- Low-confidence outputs or unclear explanations should be treated as expert-review cases.
+- Low-confidence outputs, near-threshold outputs, or unclear explanations should be treated as expert-review cases.
 
-The app also includes an activation-map debug view. This is useful for technical inspection,
-but it should not be treated as clinician-facing evidence.
+The Streamlit app also includes an optional activation-map debug view. This is useful for
+technical inspection, but it should not be treated as clinician-facing evidence.
 
 ## Evaluation Results
 
@@ -114,7 +215,7 @@ Evaluation artifacts:
 - [ROC curve](reports/evaluation/roc_curve.png)
 - [Metrics summary CSV](reports/evaluation/metrics_summary.csv)
 
-## Run The App
+## Run The Streamlit App
 
 From the repository root:
 
@@ -123,7 +224,45 @@ pip install -r requirements.txt
 streamlit run malaria_App/app.py
 ```
 
-Then upload a `.jpg`, `.jpeg`, or `.png` thin-smear cell image.
+The sidebar lets you choose:
+
+- Local model inference
+- FastAPI service inference
+- Parasitized threshold
+- Expert-review band
+- Whether validation warnings should trigger review
+- Whether Grad-CAM and activation maps should run
+- Whether predictions should be logged
+
+## Run The FastAPI Service
+
+From the repository root:
+
+```bash
+pip install -r requirements.txt
+uvicorn malaria_App.api:app --reload
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Prediction request:
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict \
+  -F "file=@sample_cell.png" \
+  -F "threshold=0.285" \
+  -F "review_margin=0.075" \
+  -F "include_xai=true" \
+  -F "route_warnings_to_review=true" \
+  -F "enable_logging=true"
+```
+
+The API returns prediction details, validation metadata, review routing, optional Grad-CAM images
+as base64 PNG data URIs, and logging status.
 
 ## Reproduce Evaluation
 
@@ -151,4 +290,5 @@ medical data.
 - Add calibration curve, Brier score, and expected calibration error.
 - Add PR-AUC and confidence intervals for core metrics.
 - Add Grad-CAM examples for true positives, true negatives, false positives, and false negatives.
+- Add Docker support for a repeatable local deployment.
 - Evaluate on an external dataset or institutionally separate holdout set.

@@ -19,6 +19,7 @@ It may be used to:
 - Demonstrate Grad-CAM as an explainability method
 - Discuss risks of using model confidence as clinical certainty
 - Discuss why healthcare AI evaluation needs sensitivity, specificity, calibration, and failure analysis
+- Demonstrate how an inference model can be wrapped with validation, review routing, and logging
 
 ## Out-of-Scope Use
 
@@ -39,7 +40,8 @@ populations.
 
 ## Explainability
 
-The Streamlit app provides Grad-CAM overlays for the predicted class.
+The Streamlit app and FastAPI inference service can provide Grad-CAM overlays for the predicted
+class.
 
 Grad-CAM can help users inspect whether the model attends to plausible image regions, but it
 does not prove that the model has learned medically valid causal features. Heatmaps should be
@@ -53,6 +55,15 @@ reviewed alongside prediction errors and confidence calibration.
   validation beyond this public dataset.
 - The model was trained on cropped cells, not full slides or patient-level cases.
 - Grad-CAM is spatially coarse and may not precisely outline parasite structures.
+- Input validation checks file safety and structural suitability, not clinical appropriateness.
+- Prediction logs are for reflection and debugging; they are not a regulated audit system.
+
+## Runtime Safeguards
+
+- Images are validated before inference for file type, decodability, size, dimensions, and RGB conversion.
+- Near-threshold predictions can be routed to expert review using a configurable review band.
+- Validation warnings can also trigger review routing.
+- Predictions can be logged to local SQLite and CSV files without storing the raw uploaded image.
 
 ## Recommended Evaluation Before Any Serious Use
 
