@@ -2,6 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 
 const state = {
   activeRequestId: null,
+  activeCorrelationId: null,
 };
 
 function formatNumber(value, digits = 3) {
@@ -43,6 +44,23 @@ function setMessage(text, isError = false) {
 function setBadge(element, text, className) {
   element.className = `status-pill ${className || "neutral"}`;
   element.textContent = text;
+}
+
+function showView(viewId) {
+  document.querySelectorAll(".view").forEach((view) => {
+    view.classList.toggle("active-view", view.id === viewId);
+  });
+  document.querySelectorAll(".nav-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === viewId);
+  });
+
+  if (viewId === "reviewView") {
+    loadQueue();
+  } else if (viewId === "monitoringView") {
+    loadMonitoring();
+  } else if (viewId === "traceView") {
+    loadEvents();
+  }
 }
 
 function newCorrelationId() {
@@ -119,11 +137,13 @@ function queueCard(row) {
   const score = formatNumber(row.parasitized_score || row.model_parasitized_score);
   const prediction = row.predicted_class || row.model_predicted_class || "Unknown";
   const reason = row.review_reason || "No review reason stored.";
+  const requestId = row.request_id || "";
   return `
     <article class="queue-card">
       <strong>${escapeHtml(prediction)} | score ${score}</strong>
-      <span class="mono">${escapeHtml(row.request_id || "missing-request-id")}</span>
+      <span class="mono">${escapeHtml(requestId || "missing-request-id")}</span>
       <span>${escapeHtml(reason)}</span>
+      <button type="button" class="secondary-button queue-select" data-request-id="${escapeHtml(requestId)}">Select For Review</button>
     </article>
   `;
 }
@@ -160,8 +180,11 @@ function renderPrediction(payload, correlationId) {
   const quality = validation.quality;
 
   state.activeRequestId = prediction.request_id;
+  state.activeCorrelationId = correlationId;
   $("#feedbackRequestId").textContent = prediction.request_id;
   $("#correlationId").textContent = correlationId;
+  $("#traceRequestInput").value = prediction.request_id;
+  $("#traceCorrelationInput").value = correlationId;
 
   $("#predictedClass").textContent = prediction.predicted_class;
   $("#parasitizedScore").textContent = formatNumber(prediction.parasitized_score);
@@ -195,6 +218,49 @@ function renderPrediction(payload, correlationId) {
   }
 }
 
+function eventCard(row) {
+  const severity = row.severity || "info";
+  const stage = row.stage || "unknown";
+  const status = row.status || "unknown";
+  const message = row.message || "";
+  const requestId = row.request_id || "";
+  const correlationId = row.correlation_id || "";
+  return `
+    <article class="event-card">
+      <strong>${escapeHtml(row.event_type || "event")} | ${escapeHtml(severity)} | ${escapeHtml(status)}</strong>
+      <span>${escapeHtml(stage)} | ${escapeHtml(row.timestamp_utc || "")}</span>
+      <span>${escapeHtml(message)}</span>
+      <span class="mono">${escapeHtml(requestId || correlationId || "no trace id")}</span>
+    </article>
+  `;
+}
+
+async function loadEvents() {
+  const list = $("#eventList");
+  try {
+    const payload = await fetchJson("/events/recent?limit=25", {
+      headers: apiHeaders(),
+    });
+    const rows = payload.items || [];
+    list.innerHTML = rows.length
+      ? rows.map(eventCard).join("")
+      : '<p class="muted">No events recorded yet.</p>';
+  } catch (error) {
+    list.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function loadTrace(url) {
+  try {
+    const payload = await fetchJson(url, {
+      headers: apiHeaders(),
+    });
+    $("#traceOutput").textContent = JSON.stringify(payload, null, 2);
+  } catch (error) {
+    $("#traceOutput").textContent = error.message;
+  }
+}
+
 async function handlePredictionSubmit(event) {
   event.preventDefault();
   setMessage("");
@@ -225,7 +291,7 @@ async function handlePredictionSubmit(event) {
     });
     renderPrediction(payload, correlationId);
     setMessage("Prediction record created.");
-    await Promise.all([loadMonitoring(), loadQueue()]);
+    await Promise.all([loadMonitoring(), loadQueue(), loadEvents()]);
   } catch (error) {
     setMessage(error.message, true);
   } finally {
@@ -257,13 +323,17 @@ async function handleFeedbackSubmit(event) {
     });
     $("#reviewerNotes").value = "";
     setMessage("Reviewer feedback saved.");
-    await Promise.all([loadMonitoring(), loadQueue()]);
+    await Promise.all([loadMonitoring(), loadQueue(), loadEvents()]);
   } catch (error) {
     setMessage(error.message, true);
   }
 }
 
 function bindEvents() {
+  document.querySelectorAll(".nav-button").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.view));
+  });
+
   $("#fileInput").addEventListener("change", () => {
     const file = $("#fileInput").files[0];
     $("#fileName").textContent = file ? file.name : "Choose microscopy image";
@@ -282,7 +352,29 @@ function bindEvents() {
   $("#feedbackForm").addEventListener("submit", handleFeedbackSubmit);
   $("#refreshButton").addEventListener("click", () => {
     loadMonitoring();
-    loadQueue();
+  });
+  $("#refreshQueueButton").addEventListener("click", loadQueue);
+  $("#refreshEventsButton").addEventListener("click", loadEvents);
+  $("#traceRequestButton").addEventListener("click", () => {
+    const requestId = $("#traceRequestInput").value.trim();
+    if (requestId) {
+      loadTrace(`/trace/${encodeURIComponent(requestId)}`);
+    }
+  });
+  $("#traceCorrelationButton").addEventListener("click", () => {
+    const correlationId = $("#traceCorrelationInput").value.trim();
+    if (correlationId) {
+      loadTrace(`/trace/correlation/${encodeURIComponent(correlationId)}`);
+    }
+  });
+  $("#queueList").addEventListener("click", (event) => {
+    const button = event.target.closest(".queue-select");
+    if (!button) {
+      return;
+    }
+    state.activeRequestId = button.dataset.requestId;
+    $("#feedbackRequestId").textContent = state.activeRequestId;
+    $("#traceRequestInput").value = state.activeRequestId;
   });
 }
 
@@ -290,3 +382,4 @@ bindEvents();
 loadHealth();
 loadMonitoring();
 loadQueue();
+loadEvents();

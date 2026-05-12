@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Malaria AI Review Workbench</title>
-    <link rel="stylesheet" href="/dashboard/styles.css">
+    <title>Malaria Microscopy Inference Platform</title>
+    <link rel="stylesheet" href="/dashboard/styles.css?v=layout2">
   </head>
   <body>
     <header class="topbar">
       <div>
-        <p class="eyebrow">Malaria Cell-Smear AI</p>
-        <h1>Clinical Review Workbench</h1>
+        <p class="eyebrow">Malaria Microscopy</p>
+        <h1>Inference Platform</h1>
       </div>
       <div class="service-strip">
         <span id="serviceStatus" class="status-pill">Checking service</span>
@@ -18,209 +18,291 @@
       </div>
     </header>
 
-    <main class="dashboard-grid">
-      <section class="panel analysis-panel">
-        <div class="panel-title">
-          <h2>Analyze Cell</h2>
-          <span id="correlationId" class="mono muted">No request yet</span>
-        </div>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Dashboard navigation">
+        <button class="nav-button active" type="button" data-view="analyzeView">Analyze</button>
+        <button class="nav-button" type="button" data-view="reviewView">Review</button>
+        <button class="nav-button" type="button" data-view="monitoringView">Monitoring</button>
+        <button class="nav-button" type="button" data-view="traceView">Trace</button>
+      </aside>
 
-        <form id="predictionForm" class="controls">
-          <label class="file-control">
-            <input id="fileInput" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required>
-            <span id="fileName">Choose microscopy image</span>
-          </label>
-
-          <label>
-            Threshold
-            <input id="thresholdInput" type="number" min="0.01" max="0.99" step="0.001" value="0.285">
-          </label>
-
-          <label>
-            Review band
-            <input id="reviewMarginInput" type="number" min="0" max="0.4" step="0.001" value="0.075">
-          </label>
-
-          <label class="check-control">
-            <input id="includeXaiInput" type="checkbox" checked>
-            Grad-CAM
-          </label>
-
-          <label class="check-control">
-            <input id="routeWarningsInput" type="checkbox" checked>
-            Route warnings
-          </label>
-
-          <label class="check-control">
-            <input id="enableLoggingInput" type="checkbox" checked>
-            Log prediction
-          </label>
-
-          <label>
-            API key
-            <input id="apiKeyInput" type="password" autocomplete="off" placeholder="Optional">
-          </label>
-
-          <button id="submitButton" type="submit">Run Inference</button>
-        </form>
-
-        <div id="messageBox" class="message" hidden></div>
-
-        <div class="image-grid">
-          <figure>
-            <img id="inputPreview" alt="Uploaded cell preview">
-            <figcaption>Uploaded image</figcaption>
-          </figure>
-          <figure>
-            <img id="gradcamPreview" alt="Grad-CAM overlay">
-            <figcaption>Grad-CAM overlay</figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <section class="panel decision-panel">
-        <div class="panel-title">
-          <h2>Decision</h2>
-          <span id="reviewBadge" class="status-pill neutral">Awaiting image</span>
-        </div>
-
-        <div class="metric-grid">
-          <div class="metric">
-            <span>Prediction</span>
-            <strong id="predictedClass">-</strong>
+      <main class="content">
+        <section id="analyzeView" class="view active-view">
+          <div class="view-header">
+            <div>
+              <span class="section-label">Workbench</span>
+              <h2>Analyze Cell Image</h2>
+            </div>
+            <span id="correlationId" class="mono muted">No request yet</span>
           </div>
-          <div class="metric">
-            <span>Parasitized score</span>
-            <strong id="parasitizedScore">-</strong>
-          </div>
-          <div class="metric">
-            <span>Decision margin</span>
-            <strong id="decisionMargin">-</strong>
-          </div>
-          <div class="metric">
-            <span>Threshold</span>
-            <strong id="thresholdValue">0.285</strong>
-          </div>
-        </div>
 
-        <div class="text-block">
-          <span class="section-label">Review reason</span>
-          <p id="reviewReason">No prediction yet.</p>
-        </div>
+          <div class="analysis-layout">
+            <section class="panel input-panel">
+              <div class="panel-title">
+                <h3>Input And Policy</h3>
+              </div>
 
-        <div class="text-block">
-          <span class="section-label">Recommendation</span>
-          <p id="recommendation">Run inference to create a decision-support record.</p>
-        </div>
-      </section>
+              <form id="predictionForm" class="controls">
+                <label class="file-control">
+                  <input id="fileInput" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" required>
+                  <span id="fileName">Choose microscopy image</span>
+                </label>
 
-      <section class="panel quality-panel">
-        <div class="panel-title">
-          <h2>Quality Gate</h2>
-          <span id="qualityBadge" class="status-pill neutral">Pending</span>
-        </div>
+                <div class="form-grid">
+                  <label>
+                    Threshold
+                    <input id="thresholdInput" type="number" min="0.01" max="0.99" step="0.001" value="0.285">
+                  </label>
 
-        <div class="metric-grid compact">
-          <div class="metric">
-            <span>Brightness</span>
-            <strong id="brightnessValue">-</strong>
-          </div>
-          <div class="metric">
-            <span>Contrast</span>
-            <strong id="contrastValue">-</strong>
-          </div>
-          <div class="metric">
-            <span>Focus</span>
-            <strong id="focusValue">-</strong>
-          </div>
-          <div class="metric">
-            <span>Size</span>
-            <strong id="imageSizeValue">-</strong>
-          </div>
-        </div>
+                  <label>
+                    Review band
+                    <input id="reviewMarginInput" type="number" min="0" max="0.4" step="0.001" value="0.075">
+                  </label>
 
-        <ul id="warningList" class="warning-list">
-          <li>No validation record yet.</li>
-        </ul>
-      </section>
+                  <label>
+                    API key
+                    <input id="apiKeyInput" type="password" autocomplete="off" placeholder="Optional">
+                  </label>
+                </div>
 
-      <section class="panel monitoring-panel">
-        <div class="panel-title">
-          <h2>Monitoring</h2>
-          <button id="refreshButton" type="button" class="secondary-button">Refresh</button>
-        </div>
+                <div class="switch-row">
+                  <label class="check-control">
+                    <input id="includeXaiInput" type="checkbox" checked>
+                    Grad-CAM
+                  </label>
 
-        <div class="metric-grid compact">
-          <div class="metric">
-            <span>Total</span>
-            <strong id="totalPredictions">-</strong>
-          </div>
-          <div class="metric">
-            <span>Review rate</span>
-            <strong id="reviewRate">-</strong>
-          </div>
-          <div class="metric">
-            <span>Warning rate</span>
-            <strong id="warningRate">-</strong>
-          </div>
-          <div class="metric">
-            <span>Quality pass</span>
-            <strong id="qualityPassRate">-</strong>
-          </div>
-          <div class="metric">
-            <span>Failure events</span>
-            <strong id="failureEvents">-</strong>
-          </div>
-          <div class="metric">
-            <span>Last failure stage</span>
-            <strong id="lastFailureStage">-</strong>
-          </div>
-        </div>
-      </section>
+                  <label class="check-control">
+                    <input id="routeWarningsInput" type="checkbox" checked>
+                    Route warnings
+                  </label>
 
-      <section class="panel feedback-panel">
-        <div class="panel-title">
-          <h2>Reviewer Feedback</h2>
-          <span id="feedbackRequestId" class="mono muted">No active request</span>
-        </div>
+                  <label class="check-control">
+                    <input id="enableLoggingInput" type="checkbox" checked>
+                    Log prediction
+                  </label>
+                </div>
 
-        <form id="feedbackForm" class="feedback-form">
-          <input id="reviewerId" type="text" autocomplete="off" placeholder="Reviewer ID">
-          <select id="reviewerDecision">
-            <option value="correct">Correct</option>
-            <option value="incorrect">Incorrect</option>
-            <option value="uncertain">Uncertain</option>
-            <option value="needs_follow_up">Needs follow-up</option>
-          </select>
-          <select id="finalLabel">
-            <option value="unknown">Final label unknown</option>
-            <option value="parasitized">Final label: parasitized</option>
-            <option value="uninfected">Final label: uninfected</option>
-            <option value="not_assessable">Not assessable</option>
-          </select>
-          <select id="followUpAction">
-            <option value="none">No follow-up</option>
-            <option value="repeat_image">Repeat image</option>
-            <option value="senior_review">Senior review</option>
-            <option value="add_to_retraining">Add to retraining set</option>
-            <option value="exclude_from_retraining">Exclude from retraining</option>
-          </select>
-          <textarea id="reviewerNotes" rows="3" placeholder="Reviewer notes"></textarea>
-          <button type="submit">Save Feedback</button>
-        </form>
-      </section>
+                <button id="submitButton" type="submit">Run Inference</button>
+              </form>
 
-      <section class="panel queue-panel">
-        <div class="panel-title">
-          <h2>Review Queue</h2>
-          <span id="queueCount" class="muted">0 cases</span>
-        </div>
-        <div id="queueList" class="queue-list">
-          <p class="muted">No queued cases loaded.</p>
-        </div>
-      </section>
-    </main>
+              <div id="messageBox" class="message" hidden></div>
+            </section>
 
-    <script src="/dashboard/app.js"></script>
+            <section class="panel decision-panel">
+              <div class="panel-title">
+                <h3>Decision</h3>
+                <span id="reviewBadge" class="status-pill neutral">Awaiting image</span>
+              </div>
+
+              <div class="metric-grid">
+                <div class="metric">
+                  <span>Prediction</span>
+                  <strong id="predictedClass">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Parasitized score</span>
+                  <strong id="parasitizedScore">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Decision margin</span>
+                  <strong id="decisionMargin">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Threshold</span>
+                  <strong id="thresholdValue">0.285</strong>
+                </div>
+              </div>
+
+              <div class="text-block">
+                <span class="section-label">Review reason</span>
+                <p id="reviewReason">No prediction yet.</p>
+              </div>
+
+              <div class="text-block">
+                <span class="section-label">Recommendation</span>
+                <p id="recommendation">Run inference to create a decision-support record.</p>
+              </div>
+            </section>
+          </div>
+
+          <div class="analysis-layout lower-layout">
+            <section class="panel image-panel">
+              <div class="panel-title">
+                <h3>Images</h3>
+              </div>
+              <div class="image-grid">
+                <figure>
+                  <img id="inputPreview" alt="Uploaded cell preview">
+                  <figcaption>Uploaded image</figcaption>
+                </figure>
+                <figure>
+                  <img id="gradcamPreview" alt="Grad-CAM overlay">
+                  <figcaption>Grad-CAM overlay</figcaption>
+                </figure>
+              </div>
+            </section>
+
+            <section class="panel quality-panel">
+              <div class="panel-title">
+                <h3>Quality Gate</h3>
+                <span id="qualityBadge" class="status-pill neutral">Pending</span>
+              </div>
+
+              <div class="metric-grid">
+                <div class="metric">
+                  <span>Brightness</span>
+                  <strong id="brightnessValue">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Contrast</span>
+                  <strong id="contrastValue">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Focus</span>
+                  <strong id="focusValue">-</strong>
+                </div>
+                <div class="metric">
+                  <span>Size</span>
+                  <strong id="imageSizeValue">-</strong>
+                </div>
+              </div>
+
+              <ul id="warningList" class="warning-list">
+                <li>No validation record yet.</li>
+              </ul>
+            </section>
+          </div>
+        </section>
+
+        <section id="reviewView" class="view">
+          <div class="view-header">
+            <div>
+              <span class="section-label">Human Review</span>
+              <h2>Queue And Feedback</h2>
+            </div>
+            <button id="refreshQueueButton" type="button" class="secondary-button">Refresh Queue</button>
+          </div>
+
+          <div class="review-layout">
+            <section class="panel queue-panel">
+              <div class="panel-title">
+                <h3>Review Queue</h3>
+                <span id="queueCount" class="muted">0 cases</span>
+              </div>
+              <div id="queueList" class="queue-list">
+                <p class="muted">No queued cases loaded.</p>
+              </div>
+            </section>
+
+            <section class="panel feedback-panel">
+              <div class="panel-title">
+                <h3>Reviewer Feedback</h3>
+                <span id="feedbackRequestId" class="mono muted">No active request</span>
+              </div>
+
+              <form id="feedbackForm" class="feedback-form">
+                <input id="reviewerId" type="text" autocomplete="off" placeholder="Reviewer ID">
+                <select id="reviewerDecision">
+                  <option value="correct">Correct</option>
+                  <option value="incorrect">Incorrect</option>
+                  <option value="uncertain">Uncertain</option>
+                  <option value="needs_follow_up">Needs follow-up</option>
+                </select>
+                <select id="finalLabel">
+                  <option value="unknown">Final label unknown</option>
+                  <option value="parasitized">Final label: parasitized</option>
+                  <option value="uninfected">Final label: uninfected</option>
+                  <option value="not_assessable">Not assessable</option>
+                </select>
+                <select id="followUpAction">
+                  <option value="none">No follow-up</option>
+                  <option value="repeat_image">Repeat image</option>
+                  <option value="senior_review">Senior review</option>
+                  <option value="add_to_retraining">Add to retraining set</option>
+                  <option value="exclude_from_retraining">Exclude from retraining</option>
+                </select>
+                <textarea id="reviewerNotes" rows="5" placeholder="Reviewer notes"></textarea>
+                <button type="submit">Save Feedback</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section id="monitoringView" class="view">
+          <div class="view-header">
+            <div>
+              <span class="section-label">Operations</span>
+              <h2>Monitoring Snapshot</h2>
+            </div>
+            <button id="refreshButton" type="button" class="secondary-button">Refresh</button>
+          </div>
+
+          <section class="panel">
+            <div class="metric-grid monitoring-grid">
+              <div class="metric">
+                <span>Total</span>
+                <strong id="totalPredictions">-</strong>
+              </div>
+              <div class="metric">
+                <span>Review rate</span>
+                <strong id="reviewRate">-</strong>
+              </div>
+              <div class="metric">
+                <span>Warning rate</span>
+                <strong id="warningRate">-</strong>
+              </div>
+              <div class="metric">
+                <span>Quality pass</span>
+                <strong id="qualityPassRate">-</strong>
+              </div>
+              <div class="metric">
+                <span>Failure events</span>
+                <strong id="failureEvents">-</strong>
+              </div>
+              <div class="metric">
+                <span>Last failure stage</span>
+                <strong id="lastFailureStage">-</strong>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section id="traceView" class="view">
+          <div class="view-header">
+            <div>
+              <span class="section-label">Traceability</span>
+              <h2>Events And Trace Bundle</h2>
+            </div>
+            <button id="refreshEventsButton" type="button" class="secondary-button">Refresh Events</button>
+          </div>
+
+          <div class="trace-layout">
+            <section class="panel">
+              <div class="panel-title">
+                <h3>Lookup</h3>
+              </div>
+              <div class="trace-controls">
+                <input id="traceRequestInput" type="text" placeholder="Request ID">
+                <button id="traceRequestButton" type="button">Trace Request</button>
+                <input id="traceCorrelationInput" type="text" placeholder="Correlation ID">
+                <button id="traceCorrelationButton" type="button">Trace Correlation</button>
+              </div>
+              <pre id="traceOutput" class="trace-output">No trace loaded.</pre>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title">
+                <h3>Recent Events</h3>
+              </div>
+              <div id="eventList" class="event-list">
+                <p class="muted">No events loaded.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/dashboard/app.js?v=layout2"></script>
   </body>
 </html>

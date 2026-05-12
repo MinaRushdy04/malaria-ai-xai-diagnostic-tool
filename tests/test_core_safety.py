@@ -86,7 +86,7 @@ def test_api_serves_dashboard_entrypoint():
 
     dashboard_response = client.get("/dashboard/")
     assert dashboard_response.status_code == 200
-    assert "Clinical Review Workbench" in dashboard_response.text
+    assert "Inference Platform" in dashboard_response.text
 
 
 def test_api_key_can_protect_operational_endpoints(monkeypatch):
