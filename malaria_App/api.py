@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
@@ -14,20 +15,31 @@ try:
         PARASITIZED_THRESHOLD,
         ImageValidationError,
         diagnose_image,
+        hash_filename,
         load_keras_model,
         model_sha256,
         package_to_api_payload,
         read_active_learning_queue,
+        read_recent_events,
         read_prediction_by_request_id,
         read_review_feedback,
+        read_trace_bundle,
+        read_trace_bundle_by_correlation_id,
         summarize_logs,
         validate_image_bytes,
+        write_system_event,
         write_review_feedback,
         write_prediction_log,
     )
     from .middleware import CorrelationIdMiddleware
     from .model_registry import read_active_model_record
-    from .schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse, ReviewFeedbackRequest
+    from .schemas import (
+        HealthResponse,
+        MonitoringSummaryResponse,
+        PredictionApiResponse,
+        ReviewFeedbackRequest,
+        TraceBundleResponse,
+    )
 except ImportError:
     from diagnostic_core import (
         DEFAULT_REVIEW_MARGIN,
@@ -35,27 +47,38 @@ except ImportError:
         PARASITIZED_THRESHOLD,
         ImageValidationError,
         diagnose_image,
+        hash_filename,
         load_keras_model,
         model_sha256,
         package_to_api_payload,
         read_active_learning_queue,
+        read_recent_events,
         read_prediction_by_request_id,
         read_review_feedback,
+        read_trace_bundle,
+        read_trace_bundle_by_correlation_id,
         summarize_logs,
         validate_image_bytes,
+        write_system_event,
         write_review_feedback,
         write_prediction_log,
     )
     from middleware import CorrelationIdMiddleware
     from model_registry import read_active_model_record
-    from schemas import HealthResponse, MonitoringSummaryResponse, PredictionApiResponse, ReviewFeedbackRequest
+    from schemas import (
+        HealthResponse,
+        MonitoringSummaryResponse,
+        PredictionApiResponse,
+        ReviewFeedbackRequest,
+        TraceBundleResponse,
+    )
 
 
 app = FastAPI(
     title="Malaria Cell-Smear AI API",
     version="1.0.0",
     description=(
-        "Academic inference API for malaria cell-smear classification with "
+        "Inference API for malaria cell-smear classification with "
         "input validation, Grad-CAM, review routing, and prediction logging."
     ),
 )
@@ -81,6 +104,10 @@ def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Ke
     expected_api_key = os.environ.get("MALARIA_API_KEY")
     if expected_api_key and x_api_key != expected_api_key:
         raise HTTPException(status_code=401, detail="Missing or invalid API key.")
+
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
 def get_model():
@@ -127,6 +154,35 @@ def review_feedback(limit: int = 100):
     return {"items": read_review_feedback(limit=limit)}
 
 
+@app.get("/events/recent", dependencies=[Depends(require_api_key)])
+def recent_events(limit: int = 100):
+    return {"items": read_recent_events(limit=limit)}
+
+
+@app.get(
+    "/trace/{request_id}",
+    response_model=TraceBundleResponse,
+    dependencies=[Depends(require_api_key)],
+)
+def trace_request(request_id: str):
+    trace = read_trace_bundle(request_id)
+    if trace["prediction"] is None and not trace["events"]:
+        raise HTTPException(status_code=404, detail="No trace records found for request_id.")
+    return trace
+
+
+@app.get(
+    "/trace/correlation/{correlation_id}",
+    response_model=TraceBundleResponse,
+    dependencies=[Depends(require_api_key)],
+)
+def trace_correlation(correlation_id: str):
+    trace = read_trace_bundle_by_correlation_id(correlation_id)
+    if trace["prediction"] is None and not trace["events"]:
+        raise HTTPException(status_code=404, detail="No trace records found for correlation_id.")
+    return trace
+
+
 @app.post("/review/feedback", dependencies=[Depends(require_api_key)])
 def create_review_feedback(feedback: ReviewFeedbackRequest):
     prediction_row = read_prediction_by_request_id(feedback.request_id)
@@ -136,6 +192,9 @@ def create_review_feedback(feedback: ReviewFeedbackRequest):
         prediction_row,
         reviewer_decision=feedback.reviewer_decision,
         reviewer_notes=feedback.reviewer_notes,
+        reviewer_id=feedback.reviewer_id,
+        final_label=feedback.final_label,
+        follow_up_action=feedback.follow_up_action,
     )
 
 
@@ -153,8 +212,25 @@ async def predict(
     route_warnings_to_review: bool = Form(True),
     enable_logging: bool = Form(True),
 ):
-    model = get_model()
     image_bytes = await file.read()
+    content_sha256 = sha256_bytes(image_bytes)
+    filename_hash = hash_filename(file.filename)
+
+    try:
+        model = get_model()
+    except HTTPException as exc:
+        write_system_event(
+            event_type="prediction.failed",
+            stage="model_load",
+            status="failed",
+            severity="error",
+            message="Model could not be loaded for prediction.",
+            correlation_id=request.state.correlation_id,
+            details={"status_code": exc.status_code, "detail": exc.detail},
+            content_sha256=content_sha256,
+            filename_hash=filename_hash,
+        )
+        raise
 
     try:
         validated = validate_image_bytes(image_bytes, filename=file.filename)
@@ -169,9 +245,44 @@ async def predict(
             correlation_id=request.state.correlation_id,
         )
     except ImageValidationError as exc:
+        write_system_event(
+            event_type="prediction.rejected",
+            stage="input_validation",
+            status="rejected",
+            severity="warning",
+            message=str(exc),
+            correlation_id=request.state.correlation_id,
+            details={"details": exc.details, "filename": file.filename},
+            content_sha256=content_sha256,
+            filename_hash=filename_hash,
+        )
         raise HTTPException(status_code=422, detail={"message": str(exc), "details": exc.details})
     except ValueError as exc:
+        write_system_event(
+            event_type="prediction.rejected",
+            stage="policy_validation",
+            status="rejected",
+            severity="warning",
+            message=str(exc),
+            correlation_id=request.state.correlation_id,
+            details={"filename": file.filename},
+            content_sha256=content_sha256,
+            filename_hash=filename_hash,
+        )
         raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        write_system_event(
+            event_type="prediction.failed",
+            stage="inference",
+            status="failed",
+            severity="error",
+            message="Unexpected inference failure.",
+            correlation_id=request.state.correlation_id,
+            details={"error": str(exc), "filename": file.filename},
+            content_sha256=content_sha256,
+            filename_hash=filename_hash,
+        )
+        raise HTTPException(status_code=500, detail="Unexpected inference failure.")
 
     payload = package_to_api_payload(package)
     payload["logging"] = (

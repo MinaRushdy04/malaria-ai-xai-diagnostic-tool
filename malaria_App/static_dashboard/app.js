@@ -103,11 +103,15 @@ async function loadMonitoring() {
     $("#reviewRate").textContent = formatPercent(summary.review_rate);
     $("#warningRate").textContent = formatPercent(summary.validation_warning_rate);
     $("#qualityPassRate").textContent = formatPercent(summary.quality_pass_rate);
+    $("#failureEvents").textContent = summary.failure_event_count ?? 0;
+    $("#lastFailureStage").textContent = summary.last_failure_stage || "-";
   } catch (error) {
     $("#totalPredictions").textContent = "-";
     $("#reviewRate").textContent = "-";
     $("#warningRate").textContent = "-";
     $("#qualityPassRate").textContent = "-";
+    $("#failureEvents").textContent = "-";
+    $("#lastFailureStage").textContent = "-";
   }
 }
 
@@ -244,7 +248,10 @@ async function handleFeedbackSubmit(event) {
       headers: apiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         request_id: state.activeRequestId,
+        reviewer_id: $("#reviewerId").value || "anonymous",
         reviewer_decision: $("#reviewerDecision").value,
+        final_label: $("#finalLabel").value,
+        follow_up_action: $("#followUpAction").value,
         reviewer_notes: $("#reviewerNotes").value,
       }),
     });

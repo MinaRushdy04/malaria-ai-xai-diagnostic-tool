@@ -4,7 +4,7 @@
     "mobilenetv2-malaria-cell-v1": {
       "manifest": "registry/models/mobilenetv2-malaria-cell-v1/manifest.json",
       "sha256": "a2169893a020ec2a47a52769b188bd0406aececa7f3cb2dfd4e3885f9b40412b",
-      "stage": "academic-demo",
+      "stage": "engineering-demo",
       "threshold": 0.28500000000000003
     }
   }

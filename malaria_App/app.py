@@ -508,7 +508,7 @@ def render_system_notes() -> None:
     st.markdown("#### Boundaries")
     st.markdown(
         """
-        - This is an academic prototype, not clinical software.
+        - This is a non-clinical engineering project, not clinical software.
         - The dataset contains cropped cell images, not full-slide patient-level microscopy.
         - Grad-CAM shows model attention, not medical causality.
         - Quality scoring is heuristic and does not replace expert specimen review.

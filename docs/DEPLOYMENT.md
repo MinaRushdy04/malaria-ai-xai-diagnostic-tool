@@ -107,7 +107,6 @@ default review margin.
 
 ## Deployment Boundary
 
-This is still an academic prototype. The deployment demonstrates separation of concerns,
-containerization, API contracts, traceability, and human-review workflow. It does not provide
-authentication, PHI-grade storage, regulated audit controls, hospital integration, or clinical
-validation.
+This is still a non-clinical engineering project. The deployment demonstrates separation of
+concerns, containerization, API contracts, traceability, and human-review workflow. It does not
+provide PHI-grade storage, regulated audit controls, hospital integration, or clinical validation.

@@ -10,8 +10,8 @@
 
 ## Intended Use
 
-This model is intended for academic demonstration of AI-assisted microscopy classification,
-with emphasis on explainability and responsible communication of limitations.
+This model is intended for non-clinical engineering demonstration of AI-assisted microscopy
+classification, with emphasis on explainability, traceability, human review, and failure handling.
 
 It may be used to:
 

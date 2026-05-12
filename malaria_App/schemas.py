@@ -87,9 +87,22 @@ class MonitoringSummaryResponse(BaseModel):
     avg_focus_score: float
     avg_brightness: float
     class_counts: dict[str, int]
+    failure_event_count: int = 0
+    last_failure_stage: str | None = None
 
 
 class ReviewFeedbackRequest(BaseModel):
     request_id: str
     reviewer_decision: str
+    reviewer_id: str = "anonymous"
+    final_label: str = "unknown"
+    follow_up_action: str = "none"
     reviewer_notes: str = ""
+
+
+class TraceBundleResponse(BaseModel):
+    request_id: str | None = None
+    correlation_id: str | None = None
+    prediction: dict[str, Any] | None = None
+    review_feedback: list[dict[str, Any]]
+    events: list[dict[str, Any]]

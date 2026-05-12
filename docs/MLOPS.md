@@ -1,8 +1,8 @@
 # MLOps And Operations Layer
 
-This project now includes lightweight MLOps scaffolding. It is intentionally sized for an
-academic/portfolio project: the scripts are runnable and the contracts are committed, but this is
-not a managed production platform.
+This project now includes lightweight MLOps scaffolding. It is intentionally sized for a
+portfolio-grade engineering project: the scripts are runnable and the contracts are committed, but
+this is not a managed production platform.
 
 ## Implemented
 

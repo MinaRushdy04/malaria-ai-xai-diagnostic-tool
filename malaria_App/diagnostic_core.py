@@ -25,6 +25,7 @@ MODEL_PATH = APP_DIR / "malaria_cell_parasite_prediction_model.h5"
 LOG_DIR = Path(os.environ.get("MALARIA_LOG_DIR", ROOT_DIR / "logs"))
 SQLITE_LOG_PATH = LOG_DIR / "predictions.sqlite3"
 CSV_LOG_PATH = LOG_DIR / "predictions.csv"
+EVENT_CSV_PATH = LOG_DIR / "events.csv"
 FEEDBACK_CSV_EXPORT_PATH = LOG_DIR / "review_feedback_export.csv"
 
 MODEL_VERSION = "mobilenetv2-malaria-cell-v1"
@@ -129,6 +130,12 @@ def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def hash_filename(filename: str | None) -> str | None:
+    if not filename:
+        return None
+    return _sha256_hex(Path(filename).name.lower().encode("utf-8"))[:16]
+
+
 @lru_cache(maxsize=1)
 def model_sha256() -> str:
     if not MODEL_PATH.exists():
@@ -215,7 +222,7 @@ def validate_image_bytes(image_bytes: bytes, filename: str | None = None) -> Val
     if filename:
         path = Path(filename)
         extension = path.suffix.lower()
-        filename_hash = _sha256_hex(path.name.lower().encode("utf-8"))[:16]
+        filename_hash = hash_filename(filename)
         if extension and extension not in ALLOWED_EXTENSIONS:
             errors.append("Only JPG, JPEG, and PNG images are accepted.")
 
@@ -586,6 +593,7 @@ LOG_COLUMNS = [
     "quality_saturation_mean",
     "quality_passed",
     "gradcam_layer",
+    "xai_error",
 ]
 
 FEEDBACK_COLUMNS = [
@@ -593,7 +601,10 @@ FEEDBACK_COLUMNS = [
     "feedback_id",
     "request_id",
     "correlation_id",
+    "reviewer_id",
     "reviewer_decision",
+    "final_label",
+    "follow_up_action",
     "reviewer_notes",
     "model_predicted_class",
     "model_parasitized_score",
@@ -601,6 +612,23 @@ FEEDBACK_COLUMNS = [
     "review_required",
     "quality_passed",
     "content_sha256",
+]
+
+EVENT_COLUMNS = [
+    "timestamp_utc",
+    "event_id",
+    "correlation_id",
+    "request_id",
+    "event_type",
+    "severity",
+    "stage",
+    "status",
+    "message",
+    "details_json",
+    "model_version",
+    "model_sha256",
+    "content_sha256",
+    "filename_hash",
 ]
 
 
@@ -637,6 +665,7 @@ def _log_record(package: DiagnosisPackage, source: str) -> dict[str, Any]:
         "quality_saturation_mean": validation.quality.saturation_mean,
         "quality_passed": int(validation.quality.passed),
         "gradcam_layer": result.gradcam_layer,
+        "xai_error": package.xai_error,
     }
 
 
@@ -664,6 +693,91 @@ def _ensure_feedback_schema(connection: sqlite3.Connection) -> None:
         if column not in existing_columns:
             connection.execute(f"ALTER TABLE review_feedback ADD COLUMN {column} TEXT")
     connection.commit()
+
+
+def _ensure_event_schema(connection: sqlite3.Connection) -> None:
+    columns_sql = ", ".join(f"{column} TEXT" for column in EVENT_COLUMNS)
+    connection.execute(f"CREATE TABLE IF NOT EXISTS system_events ({columns_sql})")
+    existing_columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(system_events)").fetchall()
+    }
+    for column in EVENT_COLUMNS:
+        if column not in existing_columns:
+            connection.execute(f"ALTER TABLE system_events ADD COLUMN {column} TEXT")
+    connection.commit()
+
+
+def _json_details(details: dict[str, Any] | list[Any] | None) -> str:
+    if details is None:
+        return "{}"
+    return json.dumps(details, sort_keys=True, default=str)
+
+
+def write_system_event(
+    event_type: str,
+    stage: str,
+    status: str,
+    message: str,
+    *,
+    severity: str = "info",
+    correlation_id: str | None = None,
+    request_id: str | None = None,
+    details: dict[str, Any] | list[Any] | None = None,
+    content_sha256: str | None = None,
+    filename_hash: str | None = None,
+) -> dict[str, Any]:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    record = {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "event_id": str(uuid.uuid4()),
+        "correlation_id": correlation_id,
+        "request_id": request_id,
+        "event_type": event_type,
+        "severity": severity,
+        "stage": stage,
+        "status": status,
+        "message": message,
+        "details_json": _json_details(details),
+        "model_version": MODEL_VERSION,
+        "model_sha256": model_sha256(),
+        "content_sha256": content_sha256,
+        "filename_hash": filename_hash,
+    }
+    event_status = {
+        "enabled": True,
+        "event_id": record["event_id"],
+        "sqlite_path": str(SQLITE_LOG_PATH),
+        "csv_path": str(EVENT_CSV_PATH),
+        "sqlite": "not_written",
+        "csv": "not_written",
+    }
+
+    try:
+        with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+            _ensure_event_schema(connection)
+            placeholders = ", ".join("?" for _ in EVENT_COLUMNS)
+            connection.execute(
+                f"INSERT INTO system_events ({', '.join(EVENT_COLUMNS)}) VALUES ({placeholders})",
+                [str(record.get(column, "")) for column in EVENT_COLUMNS],
+            )
+            connection.commit()
+        event_status["sqlite"] = "ok"
+    except Exception as exc:
+        event_status["sqlite"] = f"failed: {exc}"
+
+    try:
+        write_header = not EVENT_CSV_PATH.exists()
+        with EVENT_CSV_PATH.open("a", newline="", encoding="utf-8") as event_file:
+            writer = csv.DictWriter(event_file, fieldnames=EVENT_COLUMNS)
+            if write_header:
+                writer.writeheader()
+            writer.writerow({column: record.get(column, "") for column in EVENT_COLUMNS})
+        event_status["csv"] = "ok"
+    except Exception as exc:
+        event_status["csv"] = f"failed: {exc}"
+
+    return event_status
 
 
 def write_prediction_log(package: DiagnosisPackage, source: str = "streamlit") -> dict[str, Any]:
@@ -701,6 +815,39 @@ def write_prediction_log(package: DiagnosisPackage, source: str = "streamlit") -
     except Exception as exc:
         status["csv"] = f"failed: {exc}"
 
+    write_system_event(
+        event_type="prediction.completed",
+        stage="inference",
+        status="ok",
+        severity="info" if status["sqlite"] == "ok" or status["csv"] == "ok" else "warning",
+        message="Prediction completed and logging attempted.",
+        correlation_id=package.result.correlation_id,
+        request_id=package.result.request_id,
+        details={
+            "predicted_class": package.result.predicted_class,
+            "review_required": package.result.review_required,
+            "review_reason": package.result.review_reason,
+            "logging_status": status,
+            "xai_error": package.xai_error,
+        },
+        content_sha256=package.validation.content_sha256,
+        filename_hash=package.validation.filename_hash,
+    )
+
+    if package.xai_error:
+        write_system_event(
+            event_type="xai.failed",
+            stage="explainability",
+            status="failed",
+            severity="warning",
+            message="Grad-CAM or activation-map generation failed.",
+            correlation_id=package.result.correlation_id,
+            request_id=package.result.request_id,
+            details={"xai_error": package.xai_error},
+            content_sha256=package.validation.content_sha256,
+            filename_hash=package.validation.filename_hash,
+        )
+
     return status
 
 
@@ -731,6 +878,57 @@ def read_prediction_by_request_id(request_id: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def read_events_for_trace(
+    request_id: str | None = None,
+    correlation_id: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    if not SQLITE_LOG_PATH.exists():
+        return []
+
+    filters = []
+    values: list[str | int] = []
+    if request_id:
+        filters.append("request_id = ?")
+        values.append(request_id)
+    if correlation_id:
+        filters.append("correlation_id = ?")
+        values.append(correlation_id)
+    if not filters:
+        return []
+
+    where_clause = " OR ".join(filters)
+    values.append(int(limit))
+    with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_event_schema(connection)
+        rows = connection.execute(
+            f"""
+            SELECT *
+            FROM system_events
+            WHERE {where_clause}
+            ORDER BY timestamp_utc DESC
+            LIMIT ?
+            """,
+            tuple(values),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def read_recent_events(limit: int = 100) -> list[dict[str, Any]]:
+    if not SQLITE_LOG_PATH.exists():
+        return []
+
+    with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_event_schema(connection)
+        rows = connection.execute(
+            "SELECT * FROM system_events ORDER BY timestamp_utc DESC LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def read_active_learning_queue(limit: int = 50) -> list[dict[str, Any]]:
     if not SQLITE_LOG_PATH.exists():
         return []
@@ -743,7 +941,9 @@ def read_active_learning_queue(limit: int = 50) -> list[dict[str, Any]]:
             """
             SELECT p.*
             FROM predictions p
-            LEFT JOIN review_feedback f ON p.request_id = f.request_id
+            LEFT JOIN review_feedback f
+              ON p.request_id = f.request_id
+             AND LOWER(COALESCE(f.reviewer_decision, '')) IN ('correct', 'incorrect', 'uncertain')
             WHERE f.request_id IS NULL
               AND (
                 LOWER(COALESCE(p.review_required, '0')) IN ('1', 'true', 'yes')
@@ -762,11 +962,22 @@ def write_review_feedback(
     prediction_row: dict[str, Any],
     reviewer_decision: str,
     reviewer_notes: str = "",
+    reviewer_id: str = "anonymous",
+    final_label: str = "unknown",
+    follow_up_action: str = "none",
 ) -> dict[str, Any]:
     decision = reviewer_decision.strip().lower()
     allowed_decisions = {"correct", "incorrect", "uncertain", "needs_follow_up"}
     if decision not in allowed_decisions:
         raise ValueError(f"reviewer_decision must be one of {sorted(allowed_decisions)}")
+    final_label = final_label.strip().lower() if final_label else "unknown"
+    allowed_labels = {"parasitized", "uninfected", "unknown", "not_assessable"}
+    if final_label not in allowed_labels:
+        raise ValueError(f"final_label must be one of {sorted(allowed_labels)}")
+    follow_up_action = follow_up_action.strip().lower() if follow_up_action else "none"
+    allowed_actions = {"none", "repeat_image", "senior_review", "add_to_retraining", "exclude_from_retraining"}
+    if follow_up_action not in allowed_actions:
+        raise ValueError(f"follow_up_action must be one of {sorted(allowed_actions)}")
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     record = {
@@ -774,7 +985,10 @@ def write_review_feedback(
         "feedback_id": str(uuid.uuid4()),
         "request_id": prediction_row.get("request_id"),
         "correlation_id": prediction_row.get("correlation_id"),
+        "reviewer_id": reviewer_id.strip() or "anonymous",
         "reviewer_decision": decision,
+        "final_label": final_label,
+        "follow_up_action": follow_up_action,
         "reviewer_notes": reviewer_notes.strip(),
         "model_predicted_class": prediction_row.get("predicted_class"),
         "model_parasitized_score": prediction_row.get("parasitized_score"),
@@ -793,6 +1007,24 @@ def write_review_feedback(
         )
         connection.commit()
 
+    write_system_event(
+        event_type="review.feedback_created",
+        stage="human_review",
+        status="open" if decision == "needs_follow_up" else "completed",
+        severity="warning" if decision in {"incorrect", "needs_follow_up"} else "info",
+        message="Reviewer feedback was recorded.",
+        correlation_id=record["correlation_id"],
+        request_id=record["request_id"],
+        details={
+            "feedback_id": record["feedback_id"],
+            "reviewer_id": record["reviewer_id"],
+            "reviewer_decision": decision,
+            "final_label": final_label,
+            "follow_up_action": follow_up_action,
+        },
+        content_sha256=record["content_sha256"],
+    )
+
     return {"status": "ok", "feedback_id": record["feedback_id"], "sqlite_path": str(SQLITE_LOG_PATH)}
 
 
@@ -808,6 +1040,57 @@ def read_review_feedback(limit: int = 100) -> list[dict[str, Any]]:
             (int(limit),),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def read_review_feedback_for_request(request_id: str) -> list[dict[str, Any]]:
+    if not SQLITE_LOG_PATH.exists():
+        return []
+
+    with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_feedback_schema(connection)
+        rows = connection.execute(
+            "SELECT * FROM review_feedback WHERE request_id = ? ORDER BY timestamp_utc DESC",
+            (request_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def read_trace_bundle(request_id: str) -> dict[str, Any]:
+    prediction = read_prediction_by_request_id(request_id)
+    correlation_id = prediction.get("correlation_id") if prediction else None
+    feedback = read_review_feedback_for_request(request_id)
+    events = read_events_for_trace(request_id=request_id, correlation_id=correlation_id, limit=100)
+    return {
+        "request_id": request_id,
+        "correlation_id": correlation_id,
+        "prediction": prediction,
+        "review_feedback": feedback,
+        "events": events,
+    }
+
+
+def read_trace_bundle_by_correlation_id(correlation_id: str) -> dict[str, Any]:
+    events = read_events_for_trace(correlation_id=correlation_id, limit=100)
+    prediction = None
+    if SQLITE_LOG_PATH.exists():
+        with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+            connection.row_factory = sqlite3.Row
+            _ensure_sqlite_schema(connection)
+            row = connection.execute(
+                "SELECT * FROM predictions WHERE correlation_id = ? ORDER BY timestamp_utc DESC LIMIT 1",
+                (correlation_id,),
+            ).fetchone()
+            prediction = dict(row) if row else None
+    request_id = prediction.get("request_id") if prediction else None
+    feedback = read_review_feedback_for_request(request_id) if request_id else []
+    return {
+        "request_id": request_id,
+        "correlation_id": correlation_id,
+        "prediction": prediction,
+        "review_feedback": feedback,
+        "events": events,
+    }
 
 
 def export_review_feedback_csv(output_path: Path = FEEDBACK_CSV_EXPORT_PATH) -> str:
@@ -827,26 +1110,37 @@ def summarize_review_feedback(limit: int = 500) -> dict[str, Any]:
             "total_reviews": 0,
             "decision_counts": {},
             "model_disagreement_rate": 0.0,
+            "pending_follow_up_count": 0,
         }
 
     decision_counts: dict[str, int] = {}
     disagreement_count = 0
+    follow_up_count = 0
     for row in rows:
         decision = str(row.get("reviewer_decision") or "unknown")
         decision_counts[decision] = decision_counts.get(decision, 0) + 1
         if decision == "incorrect":
             disagreement_count += 1
+        if decision == "needs_follow_up":
+            follow_up_count += 1
 
     return {
         "total_reviews": len(rows),
         "decision_counts": decision_counts,
         "model_disagreement_rate": disagreement_count / len(rows),
+        "pending_follow_up_count": follow_up_count,
     }
 
 
 def summarize_logs(limit: int = 200) -> dict[str, Any]:
     rows = read_recent_logs(limit=limit)
     if not rows:
+        recent_events = read_recent_events(limit=limit)
+        failure_events = [
+            row for row in recent_events
+            if str(row.get("severity")).lower() in {"warning", "error"}
+            or str(row.get("status")).lower() == "failed"
+        ]
         return {
             "total_predictions": 0,
             "review_rate": 0.0,
@@ -855,6 +1149,8 @@ def summarize_logs(limit: int = 200) -> dict[str, Any]:
             "avg_focus_score": 0.0,
             "avg_brightness": 0.0,
             "class_counts": {},
+            "failure_event_count": len(failure_events),
+            "last_failure_stage": failure_events[0].get("stage") if failure_events else None,
         }
 
     def safe_float(row: dict[str, Any], key: str) -> float:
@@ -875,6 +1171,12 @@ def summarize_logs(limit: int = 200) -> dict[str, Any]:
     for row in rows:
         label = str(row.get("predicted_class") or "unknown")
         class_counts[label] = class_counts.get(label, 0) + 1
+    recent_events = read_recent_events(limit=limit)
+    failure_events = [
+        row for row in recent_events
+        if str(row.get("severity")).lower() in {"warning", "error"}
+        or str(row.get("status")).lower() == "failed"
+    ]
 
     return {
         "total_predictions": total,
@@ -884,4 +1186,6 @@ def summarize_logs(limit: int = 200) -> dict[str, Any]:
         "avg_focus_score": sum(safe_float(row, "quality_focus_score") for row in rows) / total,
         "avg_brightness": sum(safe_float(row, "quality_brightness_mean") for row in rows) / total,
         "class_counts": class_counts,
+        "failure_event_count": len(failure_events),
+        "last_failure_stage": failure_events[0].get("stage") if failure_events else None,
     }

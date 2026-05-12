@@ -14,6 +14,7 @@ from malaria_App.schemas import (
     MonitoringSummaryResponse,
     PredictionApiResponse,
     ReviewFeedbackRequest,
+    TraceBundleResponse,
 )
 
 
@@ -25,6 +26,7 @@ SCHEMAS = {
     "prediction_response.schema.json": PredictionApiResponse,
     "monitoring_summary_response.schema.json": MonitoringSummaryResponse,
     "review_feedback_request.schema.json": ReviewFeedbackRequest,
+    "trace_bundle_response.schema.json": TraceBundleResponse,
 }
 
 

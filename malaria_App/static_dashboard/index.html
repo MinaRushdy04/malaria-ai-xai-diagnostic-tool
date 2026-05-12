@@ -167,6 +167,14 @@
             <span>Quality pass</span>
             <strong id="qualityPassRate">-</strong>
           </div>
+          <div class="metric">
+            <span>Failure events</span>
+            <strong id="failureEvents">-</strong>
+          </div>
+          <div class="metric">
+            <span>Last failure stage</span>
+            <strong id="lastFailureStage">-</strong>
+          </div>
         </div>
       </section>
 
@@ -177,11 +185,25 @@
         </div>
 
         <form id="feedbackForm" class="feedback-form">
+          <input id="reviewerId" type="text" autocomplete="off" placeholder="Reviewer ID">
           <select id="reviewerDecision">
             <option value="correct">Correct</option>
             <option value="incorrect">Incorrect</option>
             <option value="uncertain">Uncertain</option>
             <option value="needs_follow_up">Needs follow-up</option>
+          </select>
+          <select id="finalLabel">
+            <option value="unknown">Final label unknown</option>
+            <option value="parasitized">Final label: parasitized</option>
+            <option value="uninfected">Final label: uninfected</option>
+            <option value="not_assessable">Not assessable</option>
+          </select>
+          <select id="followUpAction">
+            <option value="none">No follow-up</option>
+            <option value="repeat_image">Repeat image</option>
+            <option value="senior_review">Senior review</option>
+            <option value="add_to_retraining">Add to retraining set</option>
+            <option value="exclude_from_retraining">Exclude from retraining</option>
           </select>
           <textarea id="reviewerNotes" rows="3" placeholder="Reviewer notes"></textarea>
           <button type="submit">Save Feedback</button>

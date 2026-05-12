@@ -175,7 +175,7 @@ def main() -> None:
     parser.add_argument("--registry-path", type=Path, default=DEFAULT_REGISTRY_PATH)
     parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
     parser.add_argument("--version", default=DEFAULT_VERSION)
-    parser.add_argument("--stage", default="academic-demo", choices=["candidate", "academic-demo", "archived"])
+    parser.add_argument("--stage", default="engineering-demo", choices=["candidate", "engineering-demo", "archived"])
     parser.add_argument("--notes", default="Registered from committed evaluation artifacts.")
     parser.add_argument("--check", action="store_true", help="Validate the active manifest without rewriting it.")
     args = parser.parse_args()

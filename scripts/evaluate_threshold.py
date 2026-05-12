@@ -326,7 +326,7 @@ Generated: {generated_at}
 - Test slice: {split_info['test_count']} images
 
 Note: this evaluation rebuilds an 80/10/10 split from the fetched ZIP dataset. It is suitable
-for a reproducible academic report, but it may not exactly match the original Kaggle file split
+for a reproducible engineering report, but it may not exactly match the original Kaggle file split
 used in the training notebook.
 
 ## Threshold Policy
@@ -381,7 +381,7 @@ Test ROC-AUC for `{POSITIVE_CLASS}` detection: `{test_auc:.3f}`.
 - Sensitivity answers: of truly parasitized cells, how many did the model catch?
 - Specificity answers: of truly uninfected cells, how many did the model leave unflagged?
 - False negatives are especially important in a screening context because infected cells are missed.
-- The selected threshold is not clinically validated; it is an academic demonstration of explicit
+- The selected threshold is not clinically validated; it is a non-clinical demonstration of explicit
   threshold selection and should be documented as such.
 """
     report_path.write_text(content, encoding="utf-8")

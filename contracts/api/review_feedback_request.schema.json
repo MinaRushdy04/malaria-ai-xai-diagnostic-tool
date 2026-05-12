@@ -8,6 +8,21 @@
       "title": "Reviewer Decision",
       "type": "string"
     },
+    "reviewer_id": {
+      "default": "anonymous",
+      "title": "Reviewer Id",
+      "type": "string"
+    },
+    "final_label": {
+      "default": "unknown",
+      "title": "Final Label",
+      "type": "string"
+    },
+    "follow_up_action": {
+      "default": "none",
+      "title": "Follow Up Action",
+      "type": "string"
+    },
     "reviewer_notes": {
       "default": "",
       "title": "Reviewer Notes",

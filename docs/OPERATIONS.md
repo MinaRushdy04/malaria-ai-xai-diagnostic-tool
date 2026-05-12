@@ -139,7 +139,10 @@ review. The FastAPI service also exposes:
 GET  /review/queue
 GET  /review/feedback
 POST /review/feedback
+GET  /events/recent
+GET  /trace/{request_id}
+GET  /trace/correlation/{correlation_id}
 ```
 
-Review feedback is intended for academic workflow demonstration and failure analysis, not
-regulated clinical audit.
+Review feedback and operational events support workflow debugging and failure analysis. They are
+not regulated clinical audit storage.

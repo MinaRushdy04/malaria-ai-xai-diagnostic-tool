@@ -25,6 +25,9 @@ FastAPI Service
     |-- GET /health
     |-- POST /predict
     |-- GET /monitoring/summary
+    |-- GET /trace/{request_id}
+    |-- GET /trace/correlation/{correlation_id}
+    |-- GET /events/recent
     |-- GET /review/queue
     |-- GET /review/feedback
     `-- POST /review/feedback
@@ -39,6 +42,8 @@ Shared Diagnostic Core
     |-- Grad-CAM / activation maps
     |-- prediction logging
     |-- reviewer feedback storage
+    |-- operational event logging
+    |-- trace bundle retrieval
     |-- active-learning queue
     `-- monitoring summaries
 

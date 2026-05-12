@@ -1,13 +1,13 @@
-# Malaria Cell-Smear AI Diagnostic Prototype
+# Malaria Microscopy Inference Platform
 
-An academic AI-in-healthcare project for classifying cropped thin-smear microscopy cell images
-as `Parasitized` or `Uninfected`. The project emphasizes responsible integration: prediction,
-threshold selection, explainability, validation, expert-review routing, and logging are treated
-as part of the system rather than as afterthoughts.
+An ML inference service for cropped thin-smear microscopy cell images. The model classifies
+cells as `Parasitized` or `Uninfected`, but the engineering focus is the service boundary around
+that model: input validation, threshold policy, traceability, human review, failure handling,
+explainability, monitoring, and deployment.
 
-This is not a production medical device. It is a research and education prototype designed to
-show how an AI model can be wrapped in safer decision-support behavior instead of presenting
-accuracy as the only measure of success.
+This is not a production medical device and is not intended for clinical diagnosis. It is a
+portfolio-grade engineering project for building the infrastructure around an ML model before
+treating its output as decision-support evidence.
 
 The notebook is kept as supporting experimental history under `notebooks/`. The main project
 workflow is implemented through Python modules, CLI scripts, tests, a FastAPI service, a
@@ -249,8 +249,36 @@ Logged fields include:
 - Validation warnings
 - Quality metrics: brightness, contrast, focus, saturation, and quality-pass flag
 - Grad-CAM layer
+- XAI failure reason, when explainability generation fails
 
 The logger does not store raw images. Filenames are hashed rather than written directly.
+
+## Traceability And Failure Events
+
+The service now keeps an operational event trail alongside prediction logs. This covers successful
+predictions, rejected inputs, policy-validation failures, model-load failures, XAI failures, and
+review feedback events.
+
+Event records are written to:
+
+```text
+logs/predictions.sqlite3
+logs/events.csv
+```
+
+Trace endpoints:
+
+```bash
+curl http://127.0.0.1:8000/events/recent
+curl http://127.0.0.1:8000/trace/REQUEST_ID
+curl http://127.0.0.1:8000/trace/correlation/CORRELATION_ID
+```
+
+The trace bundle joins:
+
+- prediction row
+- review feedback rows
+- operational events linked by request ID or correlation ID
 
 ## Monitoring Snapshot
 
@@ -267,6 +295,8 @@ Tracked summary fields include:
 - Average focus score
 - Average brightness
 - Predicted class mix
+- Recent warning/error event count
+- Last failure stage
 
 FastAPI endpoint:
 
@@ -495,8 +525,11 @@ Submit reviewer feedback:
 ```bash
 curl -X POST http://127.0.0.1:8000/review/feedback \
   -H "Content-Type: application/json" \
-  -d "{\"request_id\":\"REQUEST_ID\",\"reviewer_decision\":\"incorrect\",\"reviewer_notes\":\"near-threshold case\"}"
+  -d "{\"request_id\":\"REQUEST_ID\",\"reviewer_id\":\"reviewer-a\",\"reviewer_decision\":\"incorrect\",\"final_label\":\"parasitized\",\"follow_up_action\":\"add_to_retraining\",\"reviewer_notes\":\"near-threshold case\"}"
 ```
+
+`needs_follow_up` feedback keeps the item visible in the review queue. Terminal decisions
+(`correct`, `incorrect`, or `uncertain`) remove the item from the active queue.
 
 ## Reproduce Evaluation
 

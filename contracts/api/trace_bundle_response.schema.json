@@ -1,0 +1,63 @@
+{
+  "properties": {
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "correlation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Correlation Id"
+    },
+    "prediction": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prediction"
+    },
+    "review_feedback": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Review Feedback",
+      "type": "array"
+    },
+    "events": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Events",
+      "type": "array"
+    }
+  },
+  "required": [
+    "review_feedback",
+    "events"
+  ],
+  "title": "TraceBundleResponse",
+  "type": "object"
+}
