@@ -15,6 +15,7 @@ class HealthResponse(BaseModel):
     default_review_margin: float
     auth_required: bool
     registry: dict[str, Any] | None = None
+    service_metrics: dict[str, Any] | None = None
 
 
 class ImageQualityResponse(BaseModel):
@@ -89,6 +90,11 @@ class MonitoringSummaryResponse(BaseModel):
     class_counts: dict[str, int]
     failure_event_count: int = 0
     last_failure_stage: str | None = None
+    recent_request_count: int = 0
+    avg_request_latency_ms: float = 0.0
+    p95_request_latency_ms: float = 0.0
+    max_request_latency_ms: float = 0.0
+    api_error_rate: float = 0.0
 
 
 class ReviewFeedbackRequest(BaseModel):
@@ -106,3 +112,4 @@ class TraceBundleResponse(BaseModel):
     prediction: dict[str, Any] | None = None
     review_feedback: list[dict[str, Any]]
     events: list[dict[str, Any]]
+    timeline: list[dict[str, Any]] = Field(default_factory=list)

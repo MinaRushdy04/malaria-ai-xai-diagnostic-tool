@@ -25,6 +25,7 @@ try:
         read_review_feedback,
         read_trace_bundle,
         read_trace_bundle_by_correlation_id,
+        summarize_api_metrics,
         summarize_logs,
         validate_image_bytes,
         write_system_event,
@@ -57,6 +58,7 @@ except ImportError:
         read_review_feedback,
         read_trace_bundle,
         read_trace_bundle_by_correlation_id,
+        summarize_api_metrics,
         summarize_logs,
         validate_image_bytes,
         write_system_event,
@@ -132,6 +134,7 @@ def health():
         "default_review_margin": DEFAULT_REVIEW_MARGIN,
         "auth_required": auth_required(),
         "registry": read_active_model_record(),
+        "service_metrics": summarize_api_metrics(limit=200),
     }
 
 

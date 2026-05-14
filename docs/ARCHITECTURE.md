@@ -11,6 +11,7 @@ FastAPI Web Dashboard
     |-- served at /dashboard/
     |-- uploads files to /predict
     |-- reads monitoring summary
+    |-- reads trace timelines
     |-- reads active review queue
     `-- submits reviewer feedback
 
@@ -43,6 +44,7 @@ Shared Diagnostic Core
     |-- prediction logging
     |-- reviewer feedback storage
     |-- operational event logging
+    |-- API request metric logging
     |-- trace bundle retrieval
     |-- active-learning queue
     `-- monitoring summaries
@@ -63,7 +65,7 @@ MLOps Layer
 - `malaria_App/api.py`: FastAPI service for inference, monitoring, review endpoints, and the static web dashboard.
 - `malaria_App/static_dashboard/`: lightweight browser dashboard served by FastAPI.
 - `malaria_App/app.py`: optional Streamlit research UI for demos and local inspection.
-- `malaria_App/middleware.py`: correlation ID and request timing middleware.
+- `malaria_App/middleware.py`: correlation ID, request timing header, and local API metric middleware.
 - `malaria_App/schemas.py`: typed FastAPI response schemas.
 - `Makefile`: repeatable local commands for checks, reports, and services.
 - `.github/workflows/ci.yml`: CI for compile checks, tests, script smoke checks, and Docker build.

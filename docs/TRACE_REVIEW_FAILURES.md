@@ -26,7 +26,15 @@ GET /events/recent
 ```
 
 `/trace/{request_id}` returns the prediction row, linked review feedback, and operational events
-for the same request/correlation chain.
+for the same request/correlation chain. It also returns a `timeline` array that converts the raw
+records into readable case steps:
+
+- input validation
+- model inference
+- review routing
+- explainability status
+- reviewer feedback
+- operational failures or warnings
 
 `/trace/correlation/{correlation_id}` is useful for rejected requests that never produced a
 prediction `request_id`.
@@ -57,6 +65,20 @@ The service logs operational events for:
 
 Failure events are included in monitoring summaries so operators can see recent warning/error
 counts and the last failure stage.
+
+## Service Metrics
+
+The API middleware records lightweight request metrics for every route:
+
+- method
+- path
+- status code
+- elapsed milliseconds
+- correlation ID
+
+Monitoring summaries include recent request count, average latency, p95 latency, max latency,
+and API error rate. This is intentionally small, but it gives the project an observable service
+boundary instead of only model-level metrics.
 
 ## Current Boundary
 

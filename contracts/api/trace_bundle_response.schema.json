@@ -52,6 +52,14 @@
       },
       "title": "Events",
       "type": "array"
+    },
+    "timeline": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Timeline",
+      "type": "array"
     }
   },
   "required": [

@@ -175,7 +175,7 @@ h3 {
 }
 
 .trace-controls {
-  grid-template-columns: minmax(160px, 1fr) 150px minmax(160px, 1fr) 170px;
+  grid-template-columns: minmax(160px, 1fr) minmax(130px, 170px);
 }
 
 label {
@@ -312,7 +312,7 @@ figcaption {
 }
 
 .monitoring-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric {
@@ -454,6 +454,128 @@ figcaption {
   white-space: pre-wrap;
 }
 
+.trace-summary {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fbfdfe;
+}
+
+.trace-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  color: var(--text);
+}
+
+.trace-summary-grid span {
+  overflow-wrap: anywhere;
+}
+
+.timeline-list {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.timeline-card {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.timeline-marker {
+  width: 12px;
+  height: 12px;
+  margin-top: 6px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px #b7d4d0;
+}
+
+.timeline-card.warning .timeline-marker {
+  background: var(--warning);
+  box-shadow: 0 0 0 2px #fde68a;
+}
+
+.timeline-card.error .timeline-marker {
+  background: var(--danger);
+  box-shadow: 0 0 0 2px #fecaca;
+}
+
+.timeline-content {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fbfdfe;
+}
+
+.timeline-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+}
+
+.timeline-head span,
+.timeline-meta,
+.timeline-content p {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.timeline-content p {
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+.timeline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.timeline-meta span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-weight: 800;
+}
+
+.timeline-content details {
+  margin-top: 8px;
+}
+
+.timeline-content summary,
+.raw-trace summary {
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.timeline-content pre {
+  max-height: 180px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 7px;
+  background: #111827;
+  color: #e5e7eb;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+
+.raw-trace {
+  margin-top: 14px;
+}
+
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -497,6 +619,7 @@ figcaption {
   .form-grid,
   .switch-row,
   .trace-controls,
+  .trace-summary-grid,
   .image-grid,
   .metric-grid,
   .monitoring-grid {

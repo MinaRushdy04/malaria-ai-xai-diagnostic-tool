@@ -25,7 +25,8 @@ FastAPI-served web dashboard, an optional Streamlit research UI, and committed e
 - Input validation before inference: file type, decodability, size, dimensions, static image check, RGB normalization, and image-quality scoring.
 - Prediction logging to SQLite and CSV for audit-style reflection.
 - Correlation IDs, model version/hash logging, and request timing headers for API traceability.
-- Lightweight monitoring summary for review rate, validation warnings, quality pass rate, and class mix.
+- Trace timeline view that joins prediction, validation, routing, review feedback, and system events.
+- Lightweight monitoring summary for review rate, validation warnings, quality pass rate, class mix, API request count, latency, and error rate.
 - Calibration analysis with Brier score, expected calibration error, reliability curve, and score histogram.
 - Bootstrap confidence intervals for threshold metrics, ROC-AUC, and PR-AUC.
 - Robustness analysis under blur, noise, contrast, exposure, and compression degradation.
@@ -55,6 +56,7 @@ FastAPI-served web dashboard, an optional Streamlit research UI, and committed e
 |-- docker-compose.yml
 |-- docs/
 |   |-- ARCHITECTURE.md
+|   |-- assets/
 |   |-- DATASETS.md
 |   |-- DEPLOYMENT.md
 |   |-- MLOPS.md
@@ -279,6 +281,7 @@ The trace bundle joins:
 - prediction row
 - review feedback rows
 - operational events linked by request ID or correlation ID
+- readable timeline steps for validation, model inference, review routing, explainability, feedback, and failures
 
 ## Monitoring Snapshot
 
@@ -297,6 +300,9 @@ Tracked summary fields include:
 - Predicted class mix
 - Recent warning/error event count
 - Last failure stage
+- Recent API request count
+- Average, p95, and max API latency
+- API error rate
 
 FastAPI endpoint:
 
@@ -403,7 +409,17 @@ The browser dashboard uses the same deployed API that external clients use. It s
 - Whether Grad-CAM should run
 - Whether predictions should be logged
 - Reviewer feedback capture
-- Monitoring and active review queue refresh
+- Monitoring, latency/service health metrics, trace lookup, and active review queue refresh
+
+Dashboard views:
+
+![Analyze dashboard](docs/assets/dashboard-analyze.png)
+
+![Review dashboard](docs/assets/dashboard-review.png)
+
+![Monitoring dashboard](docs/assets/dashboard-monitoring.png)
+
+![Trace dashboard](docs/assets/dashboard-trace.png)
 
 ## Optional Streamlit Research UI
 

@@ -16,10 +16,13 @@ from malaria_App.diagnostic_core import (
     assess_image_quality,
     build_review_decision,
     read_trace_bundle,
+    summarize_api_metrics,
     validate_image_bytes,
+    write_api_request_metric,
     write_system_event,
 )
 import malaria_App.diagnostic_core as core
+import malaria_App.middleware as middleware
 from malaria_App.api import app as api_app
 from malaria_App.middleware import CORRELATION_ID_HEADER, CorrelationIdMiddleware
 
@@ -75,6 +78,29 @@ def test_middleware_preserves_correlation_id_header():
     assert response.status_code == 200
     assert response.headers[CORRELATION_ID_HEADER] == "case-123"
     assert "X-Process-Time-Ms" in response.headers
+
+
+def test_middleware_skips_static_dashboard_metrics(monkeypatch):
+    captured: list[dict[str, object]] = []
+    monkeypatch.setattr(middleware, "write_api_request_metric", lambda **kwargs: captured.append(kwargs))
+
+    app = FastAPI()
+    app.add_middleware(CorrelationIdMiddleware)
+
+    @app.get("/dashboard/app.js")
+    def dashboard_asset():
+        return {"asset": True}
+
+    @app.get("/health")
+    def health_route():
+        return {"ok": True}
+
+    client = TestClient(app)
+    client.get("/dashboard/app.js")
+    client.get("/health")
+
+    assert len(captured) == 1
+    assert captured[0]["path"] == "/health"
 
 
 def test_api_serves_dashboard_entrypoint():
@@ -225,6 +251,7 @@ def test_follow_up_review_stays_traceable_and_queued(tmp_path, monkeypatch):
     assert trace["prediction"]["request_id"] == "req-trace"
     assert trace["review_feedback"][0]["reviewer_id"] == "reviewer-a"
     assert any(event["event_type"] == "review.feedback_created" for event in trace["events"])
+    assert any(item["stage"] == "human_review" for item in trace["timeline"])
 
     write_system_event(
         event_type="prediction.rejected",
@@ -240,3 +267,31 @@ def test_follow_up_review_stays_traceable_and_queued(tmp_path, monkeypatch):
     assert failed_trace["events"][0]["event_type"] == "prediction.rejected"
     summary = core.summarize_logs(limit=50)
     assert summary["failure_event_count"] >= 1
+
+
+def test_api_request_metrics_are_summarized(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(core, "SQLITE_LOG_PATH", tmp_path / "predictions.sqlite3")
+    monkeypatch.setattr(core, "API_METRIC_CSV_PATH", tmp_path / "api_requests.csv")
+
+    write_api_request_metric(
+        correlation_id="metric-1",
+        method="GET",
+        path="/health",
+        status_code=200,
+        elapsed_ms=12.5,
+    )
+    write_api_request_metric(
+        correlation_id="metric-2",
+        method="POST",
+        path="/predict",
+        status_code=500,
+        elapsed_ms=50.0,
+    )
+
+    summary = summarize_api_metrics(limit=10)
+
+    assert summary["recent_request_count"] == 2
+    assert summary["avg_request_latency_ms"] > 0
+    assert summary["p95_request_latency_ms"] >= summary["avg_request_latency_ms"]
+    assert summary["api_error_rate"] == 0.5

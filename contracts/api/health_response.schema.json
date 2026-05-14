@@ -51,6 +51,19 @@
       ],
       "default": null,
       "title": "Registry"
+    },
+    "service_metrics": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Service Metrics"
     }
   },
   "required": [

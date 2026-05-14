@@ -146,3 +146,17 @@ GET  /trace/correlation/{correlation_id}
 
 Review feedback and operational events support workflow debugging and failure analysis. They are
 not regulated clinical audit storage.
+
+## Service Health Metrics
+
+The FastAPI middleware records request-level service metrics into the local SQLite log store and
+CSV export:
+
+```text
+logs/predictions.sqlite3
+logs/api_requests.csv
+```
+
+The monitoring endpoint and dashboard summarize recent request count, average latency, p95
+latency, max latency, and API error rate. These values are useful for local load testing and for
+showing where a production deployment would attach real metrics infrastructure.

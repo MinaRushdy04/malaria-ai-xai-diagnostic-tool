@@ -47,6 +47,31 @@
       ],
       "default": null,
       "title": "Last Failure Stage"
+    },
+    "recent_request_count": {
+      "default": 0,
+      "title": "Recent Request Count",
+      "type": "integer"
+    },
+    "avg_request_latency_ms": {
+      "default": 0.0,
+      "title": "Avg Request Latency Ms",
+      "type": "number"
+    },
+    "p95_request_latency_ms": {
+      "default": 0.0,
+      "title": "P95 Request Latency Ms",
+      "type": "number"
+    },
+    "max_request_latency_ms": {
+      "default": 0.0,
+      "title": "Max Request Latency Ms",
+      "type": "number"
+    },
+    "api_error_rate": {
+      "default": 0.0,
+      "title": "Api Error Rate",
+      "type": "number"
     }
   },
   "required": [

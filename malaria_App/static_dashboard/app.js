@@ -19,6 +19,13 @@ function formatPercent(value) {
   return `${(Number(value) * 100).toFixed(1)}%`;
 }
 
+function formatMs(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "-";
+  }
+  return `${Number(value).toFixed(1)} ms`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -103,11 +110,16 @@ async function loadHealth() {
     if (health.auth_required) {
       $("#modelVersion").textContent += " | API key required";
     }
+    const metrics = health.service_metrics || {};
+    $("#serviceLatency").textContent = metrics.recent_request_count
+      ? `p95 ${formatMs(metrics.p95_request_latency_ms)} | errors ${formatPercent(metrics.api_error_rate)}`
+      : "No request metrics yet";
     $("#thresholdInput").value = health.default_parasitized_threshold;
     $("#reviewMarginInput").value = health.default_review_margin;
     $("#thresholdValue").textContent = formatNumber(health.default_parasitized_threshold);
   } catch (error) {
     setBadge($("#serviceStatus"), "Service unavailable", "danger");
+    $("#serviceLatency").textContent = "-";
     $("#modelVersion").textContent = error.message;
   }
 }
@@ -123,6 +135,11 @@ async function loadMonitoring() {
     $("#qualityPassRate").textContent = formatPercent(summary.quality_pass_rate);
     $("#failureEvents").textContent = summary.failure_event_count ?? 0;
     $("#lastFailureStage").textContent = summary.last_failure_stage || "-";
+    $("#recentRequestCount").textContent = summary.recent_request_count ?? 0;
+    $("#avgLatency").textContent = formatMs(summary.avg_request_latency_ms);
+    $("#p95Latency").textContent = formatMs(summary.p95_request_latency_ms);
+    $("#maxLatency").textContent = formatMs(summary.max_request_latency_ms);
+    $("#apiErrorRate").textContent = formatPercent(summary.api_error_rate);
   } catch (error) {
     $("#totalPredictions").textContent = "-";
     $("#reviewRate").textContent = "-";
@@ -130,6 +147,11 @@ async function loadMonitoring() {
     $("#qualityPassRate").textContent = "-";
     $("#failureEvents").textContent = "-";
     $("#lastFailureStage").textContent = "-";
+    $("#recentRequestCount").textContent = "-";
+    $("#avgLatency").textContent = "-";
+    $("#p95Latency").textContent = "-";
+    $("#maxLatency").textContent = "-";
+    $("#apiErrorRate").textContent = "-";
   }
 }
 
@@ -255,10 +277,63 @@ async function loadTrace(url) {
     const payload = await fetchJson(url, {
       headers: apiHeaders(),
     });
+    renderTrace(payload);
     $("#traceOutput").textContent = JSON.stringify(payload, null, 2);
   } catch (error) {
+    $("#traceSummary").textContent = error.message;
+    $("#traceTimeline").innerHTML = '<p class="muted">No trace loaded.</p>';
     $("#traceOutput").textContent = error.message;
   }
+}
+
+function renderTrace(payload) {
+  const prediction = payload.prediction || {};
+  const requestId = payload.request_id || prediction.request_id || "No request ID";
+  const correlationId = payload.correlation_id || prediction.correlation_id || "No correlation ID";
+  const timeline = payload.timeline || [];
+  const feedbackCount = (payload.review_feedback || []).length;
+  const eventCount = (payload.events || []).length;
+
+  $("#traceSummary").innerHTML = `
+    <div class="trace-summary-grid">
+      <span><strong>Request</strong><br><span class="mono">${escapeHtml(requestId)}</span></span>
+      <span><strong>Correlation</strong><br><span class="mono">${escapeHtml(correlationId)}</span></span>
+      <span><strong>Prediction</strong><br>${escapeHtml(prediction.predicted_class || "Unavailable")}</span>
+      <span><strong>Review</strong><br>${escapeHtml(prediction.review_required ? "Required" : "Not required")}</span>
+      <span><strong>Feedback</strong><br>${feedbackCount}</span>
+      <span><strong>Events</strong><br>${eventCount}</span>
+    </div>
+  `;
+
+  $("#traceTimeline").innerHTML = timeline.length
+    ? timeline.map(timelineCard).join("")
+    : '<p class="muted">No timeline records found for this trace.</p>';
+}
+
+function timelineCard(item) {
+  const severity = item.severity || "info";
+  const status = item.status || "unknown";
+  const details = item.details ? JSON.stringify(item.details, null, 2) : "{}";
+  return `
+    <article class="timeline-card ${escapeHtml(severity)}">
+      <div class="timeline-marker"></div>
+      <div class="timeline-content">
+        <div class="timeline-head">
+          <strong>${escapeHtml(item.title || item.stage || "Trace step")}</strong>
+          <span>${escapeHtml(item.timestamp_utc || "")}</span>
+        </div>
+        <p>${escapeHtml(item.message || "")}</p>
+        <div class="timeline-meta">
+          <span>${escapeHtml(item.stage || "unknown stage")}</span>
+          <span>${escapeHtml(status)}</span>
+        </div>
+        <details>
+          <summary>Step details</summary>
+          <pre>${escapeHtml(details)}</pre>
+        </details>
+      </div>
+    </article>
+  `;
 }
 
 async function handlePredictionSubmit(event) {
@@ -292,6 +367,7 @@ async function handlePredictionSubmit(event) {
     renderPrediction(payload, correlationId);
     setMessage("Prediction record created.");
     await Promise.all([loadMonitoring(), loadQueue(), loadEvents()]);
+    await loadTrace(`/trace/${encodeURIComponent(payload.prediction.request_id)}`);
   } catch (error) {
     setMessage(error.message, true);
   } finally {
@@ -375,6 +451,7 @@ function bindEvents() {
     state.activeRequestId = button.dataset.requestId;
     $("#feedbackRequestId").textContent = state.activeRequestId;
     $("#traceRequestInput").value = state.activeRequestId;
+    loadTrace(`/trace/${encodeURIComponent(state.activeRequestId)}`);
   });
 }
 

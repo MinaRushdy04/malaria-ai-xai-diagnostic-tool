@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Malaria Microscopy Inference Platform</title>
-    <link rel="stylesheet" href="/dashboard/styles.css?v=layout2">
+    <link rel="stylesheet" href="/dashboard/styles.css?v=ops1">
   </head>
   <body>
     <header class="topbar">
@@ -14,6 +14,7 @@
       </div>
       <div class="service-strip">
         <span id="serviceStatus" class="status-pill">Checking service</span>
+        <span id="serviceLatency" class="muted">Latency pending</span>
         <span id="modelVersion" class="muted">Model pending</span>
       </div>
     </header>
@@ -263,6 +264,26 @@
                 <span>Last failure stage</span>
                 <strong id="lastFailureStage">-</strong>
               </div>
+              <div class="metric">
+                <span>Recent API requests</span>
+                <strong id="recentRequestCount">-</strong>
+              </div>
+              <div class="metric">
+                <span>Avg latency</span>
+                <strong id="avgLatency">-</strong>
+              </div>
+              <div class="metric">
+                <span>P95 latency</span>
+                <strong id="p95Latency">-</strong>
+              </div>
+              <div class="metric">
+                <span>Max latency</span>
+                <strong id="maxLatency">-</strong>
+              </div>
+              <div class="metric">
+                <span>API error rate</span>
+                <strong id="apiErrorRate">-</strong>
+              </div>
             </div>
           </section>
         </section>
@@ -287,7 +308,14 @@
                 <input id="traceCorrelationInput" type="text" placeholder="Correlation ID">
                 <button id="traceCorrelationButton" type="button">Trace Correlation</button>
               </div>
-              <pre id="traceOutput" class="trace-output">No trace loaded.</pre>
+              <div id="traceSummary" class="trace-summary muted">No trace loaded.</div>
+              <div id="traceTimeline" class="timeline-list">
+                <p class="muted">Lookup a request ID or correlation ID to inspect the case timeline.</p>
+              </div>
+              <details class="raw-trace">
+                <summary>Raw trace JSON</summary>
+                <pre id="traceOutput" class="trace-output">No trace loaded.</pre>
+              </details>
             </section>
 
             <section class="panel">
@@ -303,6 +331,6 @@
       </main>
     </div>
 
-    <script src="/dashboard/app.js?v=layout2"></script>
+    <script src="/dashboard/app.js?v=ops1"></script>
   </body>
 </html>

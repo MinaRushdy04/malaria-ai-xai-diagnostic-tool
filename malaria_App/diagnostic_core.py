@@ -26,6 +26,7 @@ LOG_DIR = Path(os.environ.get("MALARIA_LOG_DIR", ROOT_DIR / "logs"))
 SQLITE_LOG_PATH = LOG_DIR / "predictions.sqlite3"
 CSV_LOG_PATH = LOG_DIR / "predictions.csv"
 EVENT_CSV_PATH = LOG_DIR / "events.csv"
+API_METRIC_CSV_PATH = LOG_DIR / "api_requests.csv"
 FEEDBACK_CSV_EXPORT_PATH = LOG_DIR / "review_feedback_export.csv"
 
 MODEL_VERSION = "mobilenetv2-malaria-cell-v1"
@@ -631,6 +632,15 @@ EVENT_COLUMNS = [
     "filename_hash",
 ]
 
+API_METRIC_COLUMNS = [
+    "timestamp_utc",
+    "correlation_id",
+    "method",
+    "path",
+    "status_code",
+    "elapsed_ms",
+]
+
 
 def _log_record(package: DiagnosisPackage, source: str) -> dict[str, Any]:
     result = package.result
@@ -708,6 +718,19 @@ def _ensure_event_schema(connection: sqlite3.Connection) -> None:
     connection.commit()
 
 
+def _ensure_api_metric_schema(connection: sqlite3.Connection) -> None:
+    columns_sql = ", ".join(f"{column} TEXT" for column in API_METRIC_COLUMNS)
+    connection.execute(f"CREATE TABLE IF NOT EXISTS api_requests ({columns_sql})")
+    existing_columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(api_requests)").fetchall()
+    }
+    for column in API_METRIC_COLUMNS:
+        if column not in existing_columns:
+            connection.execute(f"ALTER TABLE api_requests ADD COLUMN {column} TEXT")
+    connection.commit()
+
+
 def _json_details(details: dict[str, Any] | list[Any] | None) -> str:
     if details is None:
         return "{}"
@@ -778,6 +801,58 @@ def write_system_event(
         event_status["csv"] = f"failed: {exc}"
 
     return event_status
+
+
+def write_api_request_metric(
+    *,
+    correlation_id: str,
+    method: str,
+    path: str,
+    status_code: int,
+    elapsed_ms: float,
+) -> dict[str, Any]:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    record = {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "correlation_id": correlation_id,
+        "method": method,
+        "path": path,
+        "status_code": int(status_code),
+        "elapsed_ms": round(float(elapsed_ms), 2),
+    }
+    status = {
+        "enabled": True,
+        "sqlite_path": str(SQLITE_LOG_PATH),
+        "csv_path": str(API_METRIC_CSV_PATH),
+        "sqlite": "not_written",
+        "csv": "not_written",
+    }
+
+    try:
+        with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+            _ensure_api_metric_schema(connection)
+            placeholders = ", ".join("?" for _ in API_METRIC_COLUMNS)
+            connection.execute(
+                f"INSERT INTO api_requests ({', '.join(API_METRIC_COLUMNS)}) VALUES ({placeholders})",
+                [str(record.get(column, "")) for column in API_METRIC_COLUMNS],
+            )
+            connection.commit()
+        status["sqlite"] = "ok"
+    except Exception as exc:
+        status["sqlite"] = f"failed: {exc}"
+
+    try:
+        write_header = not API_METRIC_CSV_PATH.exists()
+        with API_METRIC_CSV_PATH.open("a", newline="", encoding="utf-8") as metric_file:
+            writer = csv.DictWriter(metric_file, fieldnames=API_METRIC_COLUMNS)
+            if write_header:
+                writer.writeheader()
+            writer.writerow({column: record.get(column, "") for column in API_METRIC_COLUMNS})
+        status["csv"] = "ok"
+    except Exception as exc:
+        status["csv"] = f"failed: {exc}"
+
+    return status
 
 
 def write_prediction_log(package: DiagnosisPackage, source: str = "streamlit") -> dict[str, Any]:
@@ -929,6 +1004,55 @@ def read_recent_events(limit: int = 100) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def read_recent_api_metrics(limit: int = 200) -> list[dict[str, Any]]:
+    if not SQLITE_LOG_PATH.exists():
+        return []
+
+    with sqlite3.connect(SQLITE_LOG_PATH) as connection:
+        connection.row_factory = sqlite3.Row
+        _ensure_api_metric_schema(connection)
+        rows = connection.execute(
+            "SELECT * FROM api_requests ORDER BY timestamp_utc DESC LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def summarize_api_metrics(limit: int = 200) -> dict[str, Any]:
+    rows = read_recent_api_metrics(limit=limit)
+    if not rows:
+        return {
+            "recent_request_count": 0,
+            "avg_request_latency_ms": 0.0,
+            "p95_request_latency_ms": 0.0,
+            "max_request_latency_ms": 0.0,
+            "api_error_rate": 0.0,
+        }
+
+    latencies: list[float] = []
+    error_count = 0
+    for row in rows:
+        try:
+            latencies.append(float(row.get("elapsed_ms") or 0.0))
+        except (TypeError, ValueError):
+            latencies.append(0.0)
+        try:
+            status_code = int(float(row.get("status_code") or 0))
+        except (TypeError, ValueError):
+            status_code = 0
+        if status_code >= 500:
+            error_count += 1
+
+    latency_array = np.asarray(latencies, dtype=np.float32)
+    return {
+        "recent_request_count": len(rows),
+        "avg_request_latency_ms": float(np.mean(latency_array)),
+        "p95_request_latency_ms": float(np.percentile(latency_array, 95)),
+        "max_request_latency_ms": float(np.max(latency_array)),
+        "api_error_rate": error_count / len(rows),
+    }
+
+
 def read_active_learning_queue(limit: int = 50) -> list[dict[str, Any]]:
     if not SQLITE_LOG_PATH.exists():
         return []
@@ -1067,6 +1191,7 @@ def read_trace_bundle(request_id: str) -> dict[str, Any]:
         "prediction": prediction,
         "review_feedback": feedback,
         "events": events,
+        "timeline": build_trace_timeline(prediction, feedback, events),
     }
 
 
@@ -1090,7 +1215,124 @@ def read_trace_bundle_by_correlation_id(correlation_id: str) -> dict[str, Any]:
         "prediction": prediction,
         "review_feedback": feedback,
         "events": events,
+        "timeline": build_trace_timeline(prediction, feedback, events),
     }
+
+
+def _parse_event_details(details_json: str | None) -> dict[str, Any]:
+    if not details_json:
+        return {}
+    try:
+        parsed = json.loads(details_json)
+        return parsed if isinstance(parsed, dict) else {"value": parsed}
+    except json.JSONDecodeError:
+        return {"raw": details_json}
+
+
+def build_trace_timeline(
+    prediction: dict[str, Any] | None,
+    feedback: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    timeline: list[dict[str, Any]] = []
+
+    if prediction:
+        prediction_time = prediction.get("timestamp_utc")
+        warnings = prediction.get("validation_warnings")
+        timeline.extend(
+            [
+                {
+                    "timestamp_utc": prediction_time,
+                    "stage": "input_validation",
+                    "status": "warning" if warnings not in {"", "[]", None} else "passed",
+                    "severity": "warning" if warnings not in {"", "[]", None} else "info",
+                    "title": "Input validation completed",
+                    "message": "Image decoded, normalized, and checked before inference.",
+                    "details": {
+                        "format": prediction.get("image_format"),
+                        "width": prediction.get("width"),
+                        "height": prediction.get("height"),
+                        "warnings": warnings,
+                    },
+                },
+                {
+                    "timestamp_utc": prediction_time,
+                    "stage": "model_inference",
+                    "status": "completed",
+                    "severity": "info",
+                    "title": "Model prediction generated",
+                    "message": (
+                        f"{prediction.get('predicted_class')} with parasitized score "
+                        f"{prediction.get('parasitized_score')} at threshold {prediction.get('threshold')}."
+                    ),
+                    "details": {
+                        "model_version": prediction.get("model_version"),
+                        "model_sha256": prediction.get("model_sha256"),
+                        "decision_margin": prediction.get("decision_margin"),
+                    },
+                },
+                {
+                    "timestamp_utc": prediction_time,
+                    "stage": "review_routing",
+                    "status": "review_required" if str(prediction.get("review_required")).lower() in {"1", "true", "yes"} else "not_required",
+                    "severity": "warning" if str(prediction.get("review_required")).lower() in {"1", "true", "yes"} else "info",
+                    "title": "Review policy evaluated",
+                    "message": prediction.get("review_reason") or "No review reason recorded.",
+                    "details": {
+                        "review_margin": prediction.get("review_margin"),
+                        "quality_passed": prediction.get("quality_passed"),
+                    },
+                },
+            ]
+        )
+
+        if prediction.get("gradcam_layer") or prediction.get("xai_error"):
+            timeline.append(
+                {
+                    "timestamp_utc": prediction_time,
+                    "stage": "explainability",
+                    "status": "failed" if prediction.get("xai_error") else "completed",
+                    "severity": "warning" if prediction.get("xai_error") else "info",
+                    "title": "Explainability artifact generated",
+                    "message": prediction.get("xai_error") or f"Grad-CAM layer: {prediction.get('gradcam_layer')}.",
+                    "details": {"gradcam_layer": prediction.get("gradcam_layer")},
+                }
+            )
+
+    for row in feedback:
+        timeline.append(
+            {
+                "timestamp_utc": row.get("timestamp_utc"),
+                "stage": "human_review",
+                "status": row.get("reviewer_decision") or "recorded",
+                "severity": "warning" if row.get("reviewer_decision") in {"incorrect", "needs_follow_up"} else "info",
+                "title": "Reviewer feedback recorded",
+                "message": row.get("reviewer_notes") or "Reviewer submitted a decision.",
+                "details": {
+                    "reviewer_id": row.get("reviewer_id"),
+                    "final_label": row.get("final_label"),
+                    "follow_up_action": row.get("follow_up_action"),
+                },
+            }
+        )
+
+    for row in events:
+        timeline.append(
+            {
+                "timestamp_utc": row.get("timestamp_utc"),
+                "stage": row.get("stage"),
+                "status": row.get("status"),
+                "severity": row.get("severity"),
+                "title": row.get("event_type") or "system.event",
+                "message": row.get("message") or "",
+                "details": _parse_event_details(row.get("details_json")),
+            }
+        )
+
+    return sorted(
+        timeline,
+        key=lambda item: str(item.get("timestamp_utc") or ""),
+    )
 
 
 def export_review_feedback_csv(output_path: Path = FEEDBACK_CSV_EXPORT_PATH) -> str:
@@ -1134,6 +1376,7 @@ def summarize_review_feedback(limit: int = 500) -> dict[str, Any]:
 
 def summarize_logs(limit: int = 200) -> dict[str, Any]:
     rows = read_recent_logs(limit=limit)
+    api_metrics = summarize_api_metrics(limit=limit)
     if not rows:
         recent_events = read_recent_events(limit=limit)
         failure_events = [
@@ -1151,6 +1394,7 @@ def summarize_logs(limit: int = 200) -> dict[str, Any]:
             "class_counts": {},
             "failure_event_count": len(failure_events),
             "last_failure_stage": failure_events[0].get("stage") if failure_events else None,
+            **api_metrics,
         }
 
     def safe_float(row: dict[str, Any], key: str) -> float:
@@ -1188,4 +1432,5 @@ def summarize_logs(limit: int = 200) -> dict[str, Any]:
         "class_counts": class_counts,
         "failure_event_count": len(failure_events),
         "last_failure_stage": failure_events[0].get("stage") if failure_events else None,
+        **api_metrics,
     }
