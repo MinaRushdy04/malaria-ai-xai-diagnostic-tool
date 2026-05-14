@@ -65,6 +65,7 @@ function showView(viewId) {
     loadQueue();
   } else if (viewId === "monitoringView") {
     loadMonitoring();
+    loadMonitoringHistory();
   } else if (viewId === "traceView") {
     loadEvents();
   }
@@ -140,6 +141,7 @@ async function loadMonitoring() {
     $("#p95Latency").textContent = formatMs(summary.p95_request_latency_ms);
     $("#maxLatency").textContent = formatMs(summary.max_request_latency_ms);
     $("#apiErrorRate").textContent = formatPercent(summary.api_error_rate);
+    loadMonitoringHistory();
   } catch (error) {
     $("#totalPredictions").textContent = "-";
     $("#reviewRate").textContent = "-";
@@ -153,6 +155,41 @@ async function loadMonitoring() {
     $("#maxLatency").textContent = "-";
     $("#apiErrorRate").textContent = "-";
   }
+}
+
+async function loadMonitoringHistory() {
+  const container = $("#monitoringHistory");
+  if (!container) {
+    return;
+  }
+  try {
+    const history = await fetchJson("/monitoring/history?limit=500&bucket=day", {
+      headers: apiHeaders(),
+    });
+    $("#historyBucket").textContent = `${history.bucket} buckets`;
+    const rows = history.items || [];
+    container.innerHTML = rows.length
+      ? rows.slice(0, 7).map(trendCard).join("")
+      : '<p class="muted">No monitoring history available yet.</p>';
+  } catch (error) {
+    container.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function trendCard(row) {
+  const classes = row.class_counts || {};
+  const classMix = Object.entries(classes)
+    .map(([label, count]) => `${label}: ${count}`)
+    .join(", ") || "No class mix";
+  return `
+    <article class="trend-card">
+      <strong>${escapeHtml(row.bucket)}</strong>
+      <span>Predictions ${escapeHtml(row.total_predictions ?? 0)} | API requests ${escapeHtml(row.api_request_count ?? 0)}</span>
+      <span>Review ${formatPercent(row.review_rate)} | Quality pass ${formatPercent(row.quality_pass_rate)} | Warnings ${formatPercent(row.validation_warning_rate)}</span>
+      <span>p95 latency ${formatMs(row.p95_request_latency_ms)} | API errors ${formatPercent(row.api_error_rate)}</span>
+      <span>${escapeHtml(classMix)}</span>
+    </article>
+  `;
 }
 
 function queueCard(row) {
@@ -214,6 +251,7 @@ function renderPrediction(payload, correlationId) {
   $("#thresholdValue").textContent = formatNumber(prediction.threshold);
   $("#reviewReason").textContent = prediction.review_reason;
   $("#recommendation").textContent = prediction.recommendation;
+  renderProviderExplanation(payload.provider_explanation);
 
   setBadge(
     $("#reviewBadge"),
@@ -238,6 +276,24 @@ function renderPrediction(payload, correlationId) {
   } else {
     $("#gradcamPreview").removeAttribute("src");
   }
+}
+
+function renderProviderExplanation(explanation) {
+  if (!explanation) {
+    $("#providerSummary").textContent = "No provider explanation returned.";
+    $("#providerBasis").innerHTML = "<li>No explanation details available.</li>";
+    $("#providerAction").textContent = "-";
+    return;
+  }
+  const basis = [
+    ...(explanation.decision_basis || []),
+    ...(explanation.clinician_checks || []),
+  ];
+  $("#providerSummary").textContent = explanation.summary || "No summary returned.";
+  $("#providerBasis").innerHTML = basis.length
+    ? basis.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+    : "<li>No explanation details available.</li>";
+  $("#providerAction").textContent = explanation.review_action || "-";
 }
 
 function eventCard(row) {
@@ -392,6 +448,9 @@ async function handleFeedbackSubmit(event) {
         request_id: state.activeRequestId,
         reviewer_id: $("#reviewerId").value || "anonymous",
         reviewer_decision: $("#reviewerDecision").value,
+        assigned_to: $("#assignedTo").value,
+        review_status: $("#reviewStatus").value,
+        priority: $("#reviewPriority").value,
         final_label: $("#finalLabel").value,
         follow_up_action: $("#followUpAction").value,
         reviewer_notes: $("#reviewerNotes").value,
@@ -455,8 +514,35 @@ function bindEvents() {
   });
 }
 
+function applyInitialRoute() {
+  const params = new URLSearchParams(window.location.search);
+  const viewMap = {
+    analyze: "analyzeView",
+    review: "reviewView",
+    monitoring: "monitoringView",
+    trace: "traceView",
+  };
+  const requestedView = params.get("view");
+  const viewId = viewMap[requestedView] || requestedView;
+  if (viewId && document.getElementById(viewId)) {
+    showView(viewId);
+  }
+
+  const requestId = params.get("request_id");
+  const correlationId = params.get("correlation_id");
+  if (requestId) {
+    $("#traceRequestInput").value = requestId;
+    loadTrace(`/trace/${encodeURIComponent(requestId)}`);
+  } else if (correlationId) {
+    $("#traceCorrelationInput").value = correlationId;
+    loadTrace(`/trace/correlation/${encodeURIComponent(correlationId)}`);
+  }
+}
+
 bindEvents();
 loadHealth();
 loadMonitoring();
+loadMonitoringHistory();
 loadQueue();
 loadEvents();
+applyInitialRoute();

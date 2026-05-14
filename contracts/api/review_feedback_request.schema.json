@@ -23,6 +23,21 @@
       "title": "Follow Up Action",
       "type": "string"
     },
+    "review_status": {
+      "default": "reviewed",
+      "title": "Review Status",
+      "type": "string"
+    },
+    "assigned_to": {
+      "default": "",
+      "title": "Assigned To",
+      "type": "string"
+    },
+    "priority": {
+      "default": "routine",
+      "title": "Priority",
+      "type": "string"
+    },
     "reviewer_notes": {
       "default": "",
       "title": "Reviewer Notes",

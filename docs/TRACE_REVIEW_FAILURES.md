@@ -44,13 +44,19 @@ prediction `request_id`.
 The review workflow supports more than a yes/no label:
 
 - reviewer ID
+- assigned reviewer or owner
 - reviewer decision: `correct`, `incorrect`, `uncertain`, `needs_follow_up`
+- lifecycle status: `pending`, `assigned`, `reviewed`, `escalated`, `closed`
+- priority: `routine`, `high`, `urgent`
 - final label: `parasitized`, `uninfected`, `unknown`, `not_assessable`
 - follow-up action: `none`, `repeat_image`, `senior_review`, `add_to_retraining`, `exclude_from_retraining`
 - notes
 
 `needs_follow_up` keeps the case in the active queue. Terminal decisions remove the case from the
 active queue.
+
+The goal is to represent clinical oversight as a stateful workflow: a case can be assigned,
+reviewed, escalated, or closed while remaining traceable through request ID and correlation ID.
 
 ## Failure Handling
 
@@ -79,6 +85,20 @@ The API middleware records lightweight request metrics for every route:
 Monitoring summaries include recent request count, average latency, p95 latency, max latency,
 and API error rate. This is intentionally small, but it gives the project an observable service
 boundary instead of only model-level metrics.
+
+`GET /monitoring/history` groups recent prediction and request logs into day or hour buckets so
+review rate, warning rate, quality pass rate, class mix, latency, and error rate can be watched
+over time.
+
+## Provider Explanation
+
+Each prediction response includes a `provider_explanation` object. It turns the raw score,
+threshold, quality checks, Grad-CAM status, and review policy into a provider-facing summary:
+
+- why the decision was produced,
+- whether uncertainty or image quality should trigger review,
+- what the clinician should verify,
+- and what the model cannot infer from a cropped cell image.
 
 ## Current Boundary
 

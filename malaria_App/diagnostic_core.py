@@ -544,6 +544,79 @@ def data_uri_to_image(data_uri: str) -> Image.Image:
     return Image.open(io.BytesIO(base64.b64decode(encoded))).convert("RGB")
 
 
+def build_provider_explanation(package: DiagnosisPackage) -> dict[str, Any]:
+    result = package.result
+    validation = package.validation
+    quality = validation.quality
+    near_threshold = result.decision_margin <= result.review_margin
+    validation_warnings = validation.warnings
+
+    rationale = [
+        (
+            f"Parasitized score {result.parasitized_score:.3f} "
+            f"was compared with threshold {result.threshold:.3f}."
+        ),
+        f"Decision margin is {result.decision_margin:.3f}.",
+    ]
+    if validation_warnings:
+        rationale.append("Image validation or quality warnings were present.")
+    else:
+        rationale.append("Image validation and quality checks did not raise warnings.")
+    if result.gradcam_layer:
+        rationale.append(f"Grad-CAM was generated from layer {result.gradcam_layer}.")
+    elif package.xai_error:
+        rationale.append("Grad-CAM generation failed and should not be used for review.")
+
+    if result.review_required:
+        action = "Send to human review before using this model output as decision-support evidence."
+        uncertainty_level = "review_required"
+    elif near_threshold:
+        action = "Consider review because the score is close to the configured decision threshold."
+        uncertainty_level = "near_threshold"
+    elif not quality.passed:
+        action = "Repeat or review the image because the quality gate raised concerns."
+        uncertainty_level = "quality_concern"
+    else:
+        action = "No automatic review trigger fired; routine clinical confirmation still applies."
+        uncertainty_level = "routine"
+
+    clinician_checks = [
+        "Verify that the cell crop is in focus and representative of the smear.",
+        "Compare the highlighted region with microscopy morphology rather than treating heatmap intensity as diagnosis.",
+        "Confirm the result through the appropriate human microscopy workflow.",
+    ]
+    if validation_warnings:
+        clinician_checks.insert(0, "Inspect the acquisition-quality warnings before trusting the score.")
+    if result.predicted_class == "Parasitized":
+        clinician_checks.append(
+            "If positive, confirm the parasite-like morphology and do not infer parasite burden "
+            "from this single crop."
+        )
+
+    return {
+        "summary": (
+            f"Model flagged this image as {result.predicted_class} "
+            f"with score {result.prediction_score:.3f}."
+        ),
+        "decision_basis": rationale,
+        "uncertainty_level": uncertainty_level,
+        "review_action": action,
+        "clinician_checks": clinician_checks,
+        "limitations": [
+            "This is a cropped-cell classifier, not a patient-level malaria diagnosis.",
+            "Grad-CAM shows model attention, not medical causality.",
+            "The model does not estimate species, parasitemia, symptom severity, or treatment urgency.",
+        ],
+        "quality_context": {
+            "quality_passed": quality.passed,
+            "warnings": validation_warnings,
+            "brightness_mean": quality.brightness_mean,
+            "contrast_std": quality.contrast_std,
+            "focus_score": quality.focus_score,
+        },
+    }
+
+
 def package_to_api_payload(package: DiagnosisPackage) -> dict[str, Any]:
     xai = {
         "gradcam_layer": package.result.gradcam_layer,
@@ -561,6 +634,7 @@ def package_to_api_payload(package: DiagnosisPackage) -> dict[str, Any]:
             "sha256": package.result.model_sha256,
             "input_size": IMG_SIZE,
         },
+        "provider_explanation": build_provider_explanation(package),
     }
 
 
@@ -606,6 +680,9 @@ FEEDBACK_COLUMNS = [
     "reviewer_decision",
     "final_label",
     "follow_up_action",
+    "review_status",
+    "assigned_to",
+    "priority",
     "reviewer_notes",
     "model_predicted_class",
     "model_parasitized_score",
@@ -932,6 +1009,7 @@ def read_recent_logs(limit: int = 20) -> list[dict[str, Any]]:
 
     with sqlite3.connect(SQLITE_LOG_PATH) as connection:
         connection.row_factory = sqlite3.Row
+        _ensure_sqlite_schema(connection)
         rows = connection.execute(
             "SELECT * FROM predictions ORDER BY timestamp_utc DESC LIMIT ?",
             (int(limit),),
@@ -1053,6 +1131,97 @@ def summarize_api_metrics(limit: int = 200) -> dict[str, Any]:
     }
 
 
+def _bucket_timestamp(timestamp: str | None, bucket: str) -> str:
+    if not timestamp:
+        return "unknown"
+    bucket = bucket.lower()
+    if bucket == "hour":
+        return timestamp[:13] + ":00"
+    return timestamp[:10]
+
+
+def summarize_monitoring_history(limit: int = 500, bucket: str = "day") -> dict[str, Any]:
+    if bucket not in {"day", "hour"}:
+        raise ValueError("bucket must be one of ['day', 'hour']")
+
+    prediction_rows = read_recent_logs(limit=limit)
+    api_rows = read_recent_api_metrics(limit=limit)
+    grouped: dict[str, dict[str, Any]] = {}
+
+    def entry(bucket_key: str) -> dict[str, Any]:
+        return grouped.setdefault(
+            bucket_key,
+            {
+                "bucket": bucket_key,
+                "total_predictions": 0,
+                "review_count": 0,
+                "validation_warning_count": 0,
+                "quality_pass_count": 0,
+                "api_request_count": 0,
+                "api_error_count": 0,
+                "latencies_ms": [],
+                "class_counts": {},
+            },
+        )
+
+    def safe_bool(value: Any) -> bool:
+        return str(value).lower() in {"1", "true", "yes"}
+
+    def safe_float(value: Any) -> float:
+        try:
+            return float(value or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    for row in prediction_rows:
+        item = entry(_bucket_timestamp(row.get("timestamp_utc"), bucket))
+        item["total_predictions"] += 1
+        item["review_count"] += int(safe_bool(row.get("review_required")))
+        item["validation_warning_count"] += int(row.get("validation_warnings") not in {"", "[]", None})
+        item["quality_pass_count"] += int(safe_bool(row.get("quality_passed")))
+        label = str(row.get("predicted_class") or "unknown")
+        item["class_counts"][label] = item["class_counts"].get(label, 0) + 1
+
+    for row in api_rows:
+        item = entry(_bucket_timestamp(row.get("timestamp_utc"), bucket))
+        item["api_request_count"] += 1
+        try:
+            status_code = int(float(row.get("status_code") or 0))
+        except (TypeError, ValueError):
+            status_code = 0
+        item["api_error_count"] += int(status_code >= 500)
+        item["latencies_ms"].append(safe_float(row.get("elapsed_ms")))
+
+    buckets: list[dict[str, Any]] = []
+    for item in grouped.values():
+        total = item["total_predictions"]
+        request_count = item["api_request_count"]
+        latencies = np.asarray(item["latencies_ms"], dtype=np.float32)
+        buckets.append(
+            {
+                "bucket": item["bucket"],
+                "total_predictions": total,
+                "review_rate": item["review_count"] / total if total else 0.0,
+                "validation_warning_rate": (
+                    item["validation_warning_count"] / total if total else 0.0
+                ),
+                "quality_pass_rate": item["quality_pass_count"] / total if total else 0.0,
+                "class_counts": item["class_counts"],
+                "api_request_count": request_count,
+                "api_error_rate": item["api_error_count"] / request_count if request_count else 0.0,
+                "p95_request_latency_ms": (
+                    float(np.percentile(latencies, 95)) if len(latencies) else 0.0
+                ),
+            }
+        )
+
+    return {
+        "bucket": bucket,
+        "limit": int(limit),
+        "items": sorted(buckets, key=lambda row: row["bucket"], reverse=True),
+    }
+
+
 def read_active_learning_queue(limit: int = 50) -> list[dict[str, Any]]:
     if not SQLITE_LOG_PATH.exists():
         return []
@@ -1089,6 +1258,9 @@ def write_review_feedback(
     reviewer_id: str = "anonymous",
     final_label: str = "unknown",
     follow_up_action: str = "none",
+    review_status: str = "reviewed",
+    assigned_to: str = "",
+    priority: str = "routine",
 ) -> dict[str, Any]:
     decision = reviewer_decision.strip().lower()
     allowed_decisions = {"correct", "incorrect", "uncertain", "needs_follow_up"}
@@ -1099,9 +1271,23 @@ def write_review_feedback(
     if final_label not in allowed_labels:
         raise ValueError(f"final_label must be one of {sorted(allowed_labels)}")
     follow_up_action = follow_up_action.strip().lower() if follow_up_action else "none"
-    allowed_actions = {"none", "repeat_image", "senior_review", "add_to_retraining", "exclude_from_retraining"}
+    allowed_actions = {
+        "none",
+        "repeat_image",
+        "senior_review",
+        "add_to_retraining",
+        "exclude_from_retraining",
+    }
     if follow_up_action not in allowed_actions:
         raise ValueError(f"follow_up_action must be one of {sorted(allowed_actions)}")
+    review_status = review_status.strip().lower() if review_status else "reviewed"
+    allowed_statuses = {"pending", "assigned", "reviewed", "escalated", "closed"}
+    if review_status not in allowed_statuses:
+        raise ValueError(f"review_status must be one of {sorted(allowed_statuses)}")
+    priority = priority.strip().lower() if priority else "routine"
+    allowed_priorities = {"routine", "high", "urgent"}
+    if priority not in allowed_priorities:
+        raise ValueError(f"priority must be one of {sorted(allowed_priorities)}")
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     record = {
@@ -1113,6 +1299,9 @@ def write_review_feedback(
         "reviewer_decision": decision,
         "final_label": final_label,
         "follow_up_action": follow_up_action,
+        "review_status": review_status,
+        "assigned_to": assigned_to.strip(),
+        "priority": priority,
         "reviewer_notes": reviewer_notes.strip(),
         "model_predicted_class": prediction_row.get("predicted_class"),
         "model_parasitized_score": prediction_row.get("parasitized_score"),
@@ -1134,8 +1323,12 @@ def write_review_feedback(
     write_system_event(
         event_type="review.feedback_created",
         stage="human_review",
-        status="open" if decision == "needs_follow_up" else "completed",
-        severity="warning" if decision in {"incorrect", "needs_follow_up"} else "info",
+        status=review_status,
+        severity=(
+            "warning"
+            if decision in {"incorrect", "needs_follow_up"} or review_status == "escalated"
+            else "info"
+        ),
         message="Reviewer feedback was recorded.",
         correlation_id=record["correlation_id"],
         request_id=record["request_id"],
@@ -1145,6 +1338,9 @@ def write_review_feedback(
             "reviewer_decision": decision,
             "final_label": final_label,
             "follow_up_action": follow_up_action,
+            "review_status": review_status,
+            "assigned_to": record["assigned_to"],
+            "priority": priority,
         },
         content_sha256=record["content_sha256"],
     )
@@ -1274,8 +1470,16 @@ def build_trace_timeline(
                 {
                     "timestamp_utc": prediction_time,
                     "stage": "review_routing",
-                    "status": "review_required" if str(prediction.get("review_required")).lower() in {"1", "true", "yes"} else "not_required",
-                    "severity": "warning" if str(prediction.get("review_required")).lower() in {"1", "true", "yes"} else "info",
+                    "status": (
+                        "review_required"
+                        if str(prediction.get("review_required")).lower() in {"1", "true", "yes"}
+                        else "not_required"
+                    ),
+                    "severity": (
+                        "warning"
+                        if str(prediction.get("review_required")).lower() in {"1", "true", "yes"}
+                        else "info"
+                    ),
                     "title": "Review policy evaluated",
                     "message": prediction.get("review_reason") or "No review reason recorded.",
                     "details": {
@@ -1294,24 +1498,36 @@ def build_trace_timeline(
                     "status": "failed" if prediction.get("xai_error") else "completed",
                     "severity": "warning" if prediction.get("xai_error") else "info",
                     "title": "Explainability artifact generated",
-                    "message": prediction.get("xai_error") or f"Grad-CAM layer: {prediction.get('gradcam_layer')}.",
+                    "message": (
+                        prediction.get("xai_error")
+                        or f"Grad-CAM layer: {prediction.get('gradcam_layer')}."
+                    ),
                     "details": {"gradcam_layer": prediction.get("gradcam_layer")},
                 }
             )
 
     for row in feedback:
+        review_status = row.get("review_status") or row.get("reviewer_decision") or "recorded"
         timeline.append(
             {
                 "timestamp_utc": row.get("timestamp_utc"),
                 "stage": "human_review",
-                "status": row.get("reviewer_decision") or "recorded",
-                "severity": "warning" if row.get("reviewer_decision") in {"incorrect", "needs_follow_up"} else "info",
+                "status": review_status,
+                "severity": (
+                    "warning"
+                    if row.get("reviewer_decision") in {"incorrect", "needs_follow_up"}
+                    or review_status == "escalated"
+                    else "info"
+                ),
                 "title": "Reviewer feedback recorded",
                 "message": row.get("reviewer_notes") or "Reviewer submitted a decision.",
                 "details": {
                     "reviewer_id": row.get("reviewer_id"),
+                    "reviewer_decision": row.get("reviewer_decision"),
                     "final_label": row.get("final_label"),
                     "follow_up_action": row.get("follow_up_action"),
+                    "assigned_to": row.get("assigned_to"),
+                    "priority": row.get("priority"),
                 },
             }
         )
@@ -1351,16 +1567,24 @@ def summarize_review_feedback(limit: int = 500) -> dict[str, Any]:
         return {
             "total_reviews": 0,
             "decision_counts": {},
+            "status_counts": {},
+            "priority_counts": {},
             "model_disagreement_rate": 0.0,
             "pending_follow_up_count": 0,
         }
 
     decision_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {}
+    priority_counts: dict[str, int] = {}
     disagreement_count = 0
     follow_up_count = 0
     for row in rows:
         decision = str(row.get("reviewer_decision") or "unknown")
         decision_counts[decision] = decision_counts.get(decision, 0) + 1
+        review_status = str(row.get("review_status") or "unknown")
+        status_counts[review_status] = status_counts.get(review_status, 0) + 1
+        priority = str(row.get("priority") or "unknown")
+        priority_counts[priority] = priority_counts.get(priority, 0) + 1
         if decision == "incorrect":
             disagreement_count += 1
         if decision == "needs_follow_up":
@@ -1369,6 +1593,8 @@ def summarize_review_feedback(limit: int = 500) -> dict[str, Any]:
     return {
         "total_reviews": len(rows),
         "decision_counts": decision_counts,
+        "status_counts": status_counts,
+        "priority_counts": priority_counts,
         "model_disagreement_rate": disagreement_count / len(rows),
         "pending_follow_up_count": follow_up_count,
     }

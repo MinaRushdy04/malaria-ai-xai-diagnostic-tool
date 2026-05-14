@@ -140,12 +140,16 @@ GET  /review/queue
 GET  /review/feedback
 POST /review/feedback
 GET  /events/recent
+GET  /monitoring/history
 GET  /trace/{request_id}
 GET  /trace/correlation/{correlation_id}
 ```
 
 Review feedback and operational events support workflow debugging and failure analysis. They are
 not regulated clinical audit storage.
+
+Review feedback records include assignee, status, and priority fields so the local workflow can
+separate assignment, escalation, review, and closure.
 
 ## Service Health Metrics
 
@@ -160,3 +164,13 @@ logs/api_requests.csv
 The monitoring endpoint and dashboard summarize recent request count, average latency, p95
 latency, max latency, and API error rate. These values are useful for local load testing and for
 showing where a production deployment would attach real metrics infrastructure.
+
+The history endpoint groups recent logs over time:
+
+```bash
+curl "http://127.0.0.1:8000/monitoring/history?bucket=day&limit=500"
+curl "http://127.0.0.1:8000/monitoring/history?bucket=hour&limit=500"
+```
+
+It reports prediction volume, review rate, validation-warning rate, quality-pass rate, class mix,
+API request count, p95 latency, and API error rate per bucket.

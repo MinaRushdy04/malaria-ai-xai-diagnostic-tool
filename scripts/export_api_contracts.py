@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 
 from malaria_App.schemas import (
     HealthResponse,
+    MonitoringHistoryResponse,
     MonitoringSummaryResponse,
     PredictionApiResponse,
     ReviewFeedbackRequest,
@@ -25,6 +26,7 @@ SCHEMAS = {
     "health_response.schema.json": HealthResponse,
     "prediction_response.schema.json": PredictionApiResponse,
     "monitoring_summary_response.schema.json": MonitoringSummaryResponse,
+    "monitoring_history_response.schema.json": MonitoringHistoryResponse,
     "review_feedback_request.schema.json": ReviewFeedbackRequest,
     "trace_bundle_response.schema.json": TraceBundleResponse,
 }

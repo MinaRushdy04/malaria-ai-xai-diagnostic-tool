@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Malaria Microscopy Inference Platform</title>
-    <link rel="stylesheet" href="/dashboard/styles.css?v=ops1">
+    <link rel="stylesheet" href="/dashboard/styles.css?v=oversight1">
   </head>
   <body>
     <header class="topbar">
@@ -123,6 +123,15 @@
                 <span class="section-label">Recommendation</span>
                 <p id="recommendation">Run inference to create a decision-support record.</p>
               </div>
+
+              <div class="text-block provider-block">
+                <span class="section-label">Provider Explanation</span>
+                <p id="providerSummary">No provider explanation yet.</p>
+                <ul id="providerBasis" class="compact-list">
+                  <li>Run inference to create explanation details.</li>
+                </ul>
+                <p id="providerAction" class="provider-action">No review action yet.</p>
+              </div>
             </section>
           </div>
 
@@ -203,11 +212,24 @@
 
               <form id="feedbackForm" class="feedback-form">
                 <input id="reviewerId" type="text" autocomplete="off" placeholder="Reviewer ID">
+                <input id="assignedTo" type="text" autocomplete="off" placeholder="Assigned to">
                 <select id="reviewerDecision">
                   <option value="correct">Correct</option>
                   <option value="incorrect">Incorrect</option>
                   <option value="uncertain">Uncertain</option>
                   <option value="needs_follow_up">Needs follow-up</option>
+                </select>
+                <select id="reviewStatus">
+                  <option value="reviewed">Reviewed</option>
+                  <option value="assigned">Assigned</option>
+                  <option value="escalated">Escalated</option>
+                  <option value="closed">Closed</option>
+                  <option value="pending">Pending</option>
+                </select>
+                <select id="reviewPriority">
+                  <option value="routine">Routine priority</option>
+                  <option value="high">High priority</option>
+                  <option value="urgent">Urgent priority</option>
                 </select>
                 <select id="finalLabel">
                   <option value="unknown">Final label unknown</option>
@@ -286,6 +308,16 @@
               </div>
             </div>
           </section>
+
+          <section class="panel trend-panel">
+            <div class="panel-title">
+              <h3>Monitoring Over Time</h3>
+              <span id="historyBucket" class="muted">Daily buckets</span>
+            </div>
+            <div id="monitoringHistory" class="trend-list">
+              <p class="muted">No monitoring history loaded.</p>
+            </div>
+          </section>
         </section>
 
         <section id="traceView" class="view">
@@ -331,6 +363,6 @@
       </main>
     </div>
 
-    <script src="/dashboard/app.js?v=ops1"></script>
+    <script src="/dashboard/app.js?v=oversight1"></script>
   </body>
 </html>

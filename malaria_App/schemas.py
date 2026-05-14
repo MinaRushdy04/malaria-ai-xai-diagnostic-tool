@@ -71,12 +71,23 @@ class ModelResponse(BaseModel):
     input_size: tuple[int, int]
 
 
+class ProviderExplanationResponse(BaseModel):
+    summary: str
+    decision_basis: list[str]
+    uncertainty_level: str
+    review_action: str
+    clinician_checks: list[str]
+    limitations: list[str]
+    quality_context: dict[str, Any]
+
+
 class PredictionApiResponse(BaseModel):
     prediction: PredictionResponse
     validation: ValidationResponse
     tensor_shape: tuple[int, ...]
     xai: XAIResponse
     model: ModelResponse
+    provider_explanation: ProviderExplanationResponse
     logging: dict[str, Any]
 
 
@@ -97,12 +108,21 @@ class MonitoringSummaryResponse(BaseModel):
     api_error_rate: float = 0.0
 
 
+class MonitoringHistoryResponse(BaseModel):
+    bucket: str
+    limit: int
+    items: list[dict[str, Any]]
+
+
 class ReviewFeedbackRequest(BaseModel):
     request_id: str
     reviewer_decision: str
     reviewer_id: str = "anonymous"
     final_label: str = "unknown"
     follow_up_action: str = "none"
+    review_status: str = "reviewed"
+    assigned_to: str = ""
+    priority: str = "routine"
     reviewer_notes: str = ""
 
 

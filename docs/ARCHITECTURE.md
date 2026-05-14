@@ -26,6 +26,7 @@ FastAPI Service
     |-- GET /health
     |-- POST /predict
     |-- GET /monitoring/summary
+    |-- GET /monitoring/history
     |-- GET /trace/{request_id}
     |-- GET /trace/correlation/{correlation_id}
     |-- GET /events/recent
@@ -41,8 +42,10 @@ Shared Diagnostic Core
     |-- thresholding
     |-- expert-review routing
     |-- Grad-CAM / activation maps
+    |-- provider explanation packet
     |-- prediction logging
     |-- reviewer feedback storage
+    |-- review lifecycle status
     |-- operational event logging
     |-- API request metric logging
     |-- trace bundle retrieval
@@ -87,8 +90,9 @@ MLOps Layer
 ## Design Principle
 
 The model is treated as one component inside a decision-support workflow. The surrounding system
-handles input validation, quality warnings, configurable review routing, explainability, logs,
-human feedback, and monitoring summaries so the output is easier to inspect and reason about.
+handles input validation, quality warnings, configurable review routing, provider-facing
+explanations, logs, human feedback, and monitoring summaries so the output is easier to inspect
+and reason about.
 
 The deployed path is API-first. The browser dashboard is a thin client over FastAPI endpoints,
 which makes the project easier to containerize, document, test, and replace with a larger frontend
@@ -105,6 +109,10 @@ Predictions marked as high priority are added to an active-learning queue when t
 The dashboard lets a reviewer label cases as `correct`, `incorrect`, `uncertain`, or
 `needs_follow_up`. Feedback is stored locally in SQLite and can be exported as CSV. This creates
 a realistic loop for retrospective failure analysis without claiming clinical deployment.
+
+The review workflow also tracks assignee, priority, and lifecycle status (`pending`, `assigned`,
+`reviewed`, `escalated`, or `closed`) so human oversight is represented as a workflow state, not
+only as a one-time label.
 
 ## Current Scope Boundary
 

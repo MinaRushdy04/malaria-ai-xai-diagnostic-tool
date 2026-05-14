@@ -352,6 +352,19 @@ figcaption {
   line-height: 1.45;
 }
 
+.provider-block {
+  border-top-color: #bfdad6;
+}
+
+.provider-action {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 7px;
+  background: #ecfeff;
+  color: #164e63;
+  font-weight: 800;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -396,7 +409,9 @@ figcaption {
 
 .warning-list,
 .queue-list,
-.event-list {
+.event-list,
+.compact-list,
+.trend-list {
   display: grid;
   gap: 10px;
   margin: 14px 0 0;
@@ -405,8 +420,10 @@ figcaption {
 }
 
 .warning-list li,
+.compact-list li,
 .queue-card,
-.event-card {
+.event-card,
+.trend-card {
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 10px 12px;
@@ -419,16 +436,28 @@ figcaption {
   gap: 8px;
 }
 
+.trend-panel {
+  margin-top: 16px;
+}
+
+.trend-card {
+  display: grid;
+  gap: 6px;
+}
+
 .queue-card strong,
 .queue-card span,
 .event-card strong,
-.event-card span {
+.event-card span,
+.trend-card strong,
+.trend-card span {
   display: block;
   overflow-wrap: anywhere;
 }
 
 .queue-card span,
-.event-card span {
+.event-card span,
+.trend-card span {
   color: var(--muted);
   font-size: 0.82rem;
 }

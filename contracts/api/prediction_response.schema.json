@@ -164,6 +164,59 @@
       "title": "PredictionResponse",
       "type": "object"
     },
+    "ProviderExplanationResponse": {
+      "properties": {
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "decision_basis": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Decision Basis",
+          "type": "array"
+        },
+        "uncertainty_level": {
+          "title": "Uncertainty Level",
+          "type": "string"
+        },
+        "review_action": {
+          "title": "Review Action",
+          "type": "string"
+        },
+        "clinician_checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Clinician Checks",
+          "type": "array"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "quality_context": {
+          "additionalProperties": true,
+          "title": "Quality Context",
+          "type": "object"
+        }
+      },
+      "required": [
+        "summary",
+        "decision_basis",
+        "uncertainty_level",
+        "review_action",
+        "clinician_checks",
+        "limitations",
+        "quality_context"
+      ],
+      "title": "ProviderExplanationResponse",
+      "type": "object"
+    },
     "ValidationResponse": {
       "properties": {
         "content_sha256": {
@@ -315,6 +368,9 @@
     "model": {
       "$ref": "#/$defs/ModelResponse"
     },
+    "provider_explanation": {
+      "$ref": "#/$defs/ProviderExplanationResponse"
+    },
     "logging": {
       "additionalProperties": true,
       "title": "Logging",
@@ -327,6 +383,7 @@
     "tensor_shape",
     "xai",
     "model",
+    "provider_explanation",
     "logging"
   ],
   "title": "PredictionApiResponse",

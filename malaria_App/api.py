@@ -26,6 +26,7 @@ try:
         read_trace_bundle,
         read_trace_bundle_by_correlation_id,
         summarize_api_metrics,
+        summarize_monitoring_history,
         summarize_logs,
         validate_image_bytes,
         write_system_event,
@@ -37,6 +38,7 @@ try:
     from .schemas import (
         HealthResponse,
         MonitoringSummaryResponse,
+        MonitoringHistoryResponse,
         PredictionApiResponse,
         ReviewFeedbackRequest,
         TraceBundleResponse,
@@ -59,6 +61,7 @@ except ImportError:
         read_trace_bundle,
         read_trace_bundle_by_correlation_id,
         summarize_api_metrics,
+        summarize_monitoring_history,
         summarize_logs,
         validate_image_bytes,
         write_system_event,
@@ -70,6 +73,7 @@ except ImportError:
     from schemas import (
         HealthResponse,
         MonitoringSummaryResponse,
+        MonitoringHistoryResponse,
         PredictionApiResponse,
         ReviewFeedbackRequest,
         TraceBundleResponse,
@@ -147,6 +151,18 @@ def monitoring_summary(limit: int = 200):
     return summarize_logs(limit=limit)
 
 
+@app.get(
+    "/monitoring/history",
+    response_model=MonitoringHistoryResponse,
+    dependencies=[Depends(require_api_key)],
+)
+def monitoring_history(limit: int = 500, bucket: str = "day"):
+    try:
+        return summarize_monitoring_history(limit=limit, bucket=bucket)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.get("/review/queue", dependencies=[Depends(require_api_key)])
 def review_queue(limit: int = 50):
     return {"items": read_active_learning_queue(limit=limit)}
@@ -198,6 +214,9 @@ def create_review_feedback(feedback: ReviewFeedbackRequest):
         reviewer_id=feedback.reviewer_id,
         final_label=feedback.final_label,
         follow_up_action=feedback.follow_up_action,
+        review_status=feedback.review_status,
+        assigned_to=feedback.assigned_to,
+        priority=feedback.priority,
     )
 
 

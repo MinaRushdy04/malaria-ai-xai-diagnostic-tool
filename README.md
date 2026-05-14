@@ -20,6 +20,7 @@ FastAPI-served web dashboard, an optional Streamlit research UI, and committed e
 - FastAPI-served browser dashboard at `/dashboard/` for a cleaner deployment path.
 - Optional Streamlit research dashboard with local-model mode and FastAPI-service mode.
 - Grad-CAM overlay for model attention, plus optional activation-map debug view.
+- Provider-facing explanation packet for decision basis, uncertainty, review action, and clinician checks.
 - Validation-based threshold rationale for the `Parasitized` class.
 - Flexible expert-review routing for near-threshold, validation-warning, or quality-warning cases.
 - Input validation before inference: file type, decodability, size, dimensions, static image check, RGB normalization, and image-quality scoring.
@@ -27,6 +28,7 @@ FastAPI-served web dashboard, an optional Streamlit research UI, and committed e
 - Correlation IDs, model version/hash logging, and request timing headers for API traceability.
 - Trace timeline view that joins prediction, validation, routing, review feedback, and system events.
 - Lightweight monitoring summary for review rate, validation warnings, quality pass rate, class mix, API request count, latency, and error rate.
+- Monitoring history endpoint and dashboard trend cards for observing behavior over time.
 - Calibration analysis with Brier score, expected calibration error, reliability curve, and score histogram.
 - Bootstrap confidence intervals for threshold metrics, ROC-AUC, and PR-AUC.
 - Robustness analysis under blur, noise, contrast, exposure, and compression degradation.
@@ -39,7 +41,7 @@ FastAPI-served web dashboard, an optional Streamlit research UI, and committed e
 - Experiment tracking hooks for local JSON records, optional MLflow, and optional W&B.
 - Drift monitoring, retraining orchestration, and load-test scripts.
 - GitHub Actions CI and Makefile targets for repeatable checks.
-- Human-in-the-loop review queue with reviewer feedback storage and CSV export.
+- Human-in-the-loop review queue with reviewer feedback, assignment, priority, lifecycle status, and CSV export.
 - Script-first utilities for training, threshold evaluation, calibration, robustness, error analysis, and single-image CLI prediction.
 - Automated tests for validation, quality gate, review routing, and API middleware behavior.
 - Committed evaluation artifacts: confusion matrices, ROC curve, threshold sweep, metrics CSV, and markdown report.
@@ -225,6 +227,13 @@ Any case in that range is treated as uncertain enough for human review. This is 
 flexible: the user can widen or narrow the review band in Streamlit, and API callers can pass
 `review_margin` per request.
 
+Review records support a small oversight lifecycle:
+
+- status: `pending`, `assigned`, `reviewed`, `escalated`, or `closed`
+- priority: `routine`, `high`, or `urgent`
+- assignee/reviewer identity
+- final label and follow-up action
+
 ## Logging
 
 If logging is enabled, each prediction writes a row to:
@@ -254,6 +263,15 @@ Logged fields include:
 - XAI failure reason, when explainability generation fails
 
 The logger does not store raw images. Filenames are hashed rather than written directly.
+
+Each prediction response also includes a provider-facing explanation packet with:
+
+- model score and threshold basis
+- decision margin and uncertainty level
+- quality context and warnings
+- review action
+- suggested clinician checks
+- explicit limitations of the cropped-cell classifier
 
 ## Traceability And Failure Events
 
@@ -303,11 +321,13 @@ Tracked summary fields include:
 - Recent API request count
 - Average, p95, and max API latency
 - API error rate
+- Daily or hourly monitoring trend buckets
 
 FastAPI endpoint:
 
 ```bash
 curl http://127.0.0.1:8000/monitoring/summary
+curl http://127.0.0.1:8000/monitoring/history
 ```
 
 ## Explainability
@@ -408,8 +428,10 @@ The browser dashboard uses the same deployed API that external clients use. It s
 - Whether validation warnings should trigger review
 - Whether Grad-CAM should run
 - Whether predictions should be logged
+- Provider-facing explanation output
 - Reviewer feedback capture
-- Monitoring, latency/service health metrics, trace lookup, and active review queue refresh
+- Review lifecycle status, assignee, and priority capture
+- Monitoring trends, latency/service health metrics, trace lookup, and active review queue refresh
 
 Dashboard views:
 
@@ -534,6 +556,7 @@ Human review endpoints:
 ```bash
 curl http://127.0.0.1:8000/review/queue
 curl http://127.0.0.1:8000/review/feedback
+curl http://127.0.0.1:8000/monitoring/history
 ```
 
 Submit reviewer feedback:
@@ -541,7 +564,7 @@ Submit reviewer feedback:
 ```bash
 curl -X POST http://127.0.0.1:8000/review/feedback \
   -H "Content-Type: application/json" \
-  -d "{\"request_id\":\"REQUEST_ID\",\"reviewer_id\":\"reviewer-a\",\"reviewer_decision\":\"incorrect\",\"final_label\":\"parasitized\",\"follow_up_action\":\"add_to_retraining\",\"reviewer_notes\":\"near-threshold case\"}"
+  -d "{\"request_id\":\"REQUEST_ID\",\"reviewer_id\":\"reviewer-a\",\"assigned_to\":\"senior-reviewer\",\"reviewer_decision\":\"incorrect\",\"review_status\":\"escalated\",\"priority\":\"high\",\"final_label\":\"parasitized\",\"follow_up_action\":\"add_to_retraining\",\"reviewer_notes\":\"near-threshold case\"}"
 ```
 
 `needs_follow_up` feedback keeps the item visible in the review queue. Terminal decisions

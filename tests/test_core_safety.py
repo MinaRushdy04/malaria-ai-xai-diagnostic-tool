@@ -172,6 +172,10 @@ def test_review_feedback_removes_case_from_active_queue(tmp_path, monkeypatch):
     package = DiagnosisPackage(result=result, validation=validation, tensor_shape=(1, 224, 224, 3))
 
     core.write_prediction_log(package, source="test")
+    payload = core.package_to_api_payload(package)
+    assert payload["provider_explanation"]["uncertainty_level"] == "review_required"
+    assert payload["provider_explanation"]["clinician_checks"]
+
     queue = core.read_active_learning_queue(limit=10)
     assert len(queue) == 1
     assert queue[0]["request_id"] == "req-1"
@@ -241,6 +245,9 @@ def test_follow_up_review_stays_traceable_and_queued(tmp_path, monkeypatch):
         reviewer_id="reviewer-a",
         final_label="not_assessable",
         follow_up_action="repeat_image",
+        review_status="escalated",
+        assigned_to="reviewer-b",
+        priority="urgent",
         reviewer_notes="blurred field",
     )
 
@@ -250,8 +257,14 @@ def test_follow_up_review_stays_traceable_and_queued(tmp_path, monkeypatch):
     trace = read_trace_bundle("req-trace")
     assert trace["prediction"]["request_id"] == "req-trace"
     assert trace["review_feedback"][0]["reviewer_id"] == "reviewer-a"
+    assert trace["review_feedback"][0]["review_status"] == "escalated"
+    assert trace["review_feedback"][0]["assigned_to"] == "reviewer-b"
+    assert trace["review_feedback"][0]["priority"] == "urgent"
     assert any(event["event_type"] == "review.feedback_created" for event in trace["events"])
-    assert any(item["stage"] == "human_review" for item in trace["timeline"])
+    assert any(
+        item["stage"] == "human_review" and item["status"] == "escalated"
+        for item in trace["timeline"]
+    )
 
     write_system_event(
         event_type="prediction.rejected",
@@ -295,3 +308,7 @@ def test_api_request_metrics_are_summarized(tmp_path, monkeypatch):
     assert summary["avg_request_latency_ms"] > 0
     assert summary["p95_request_latency_ms"] >= summary["avg_request_latency_ms"]
     assert summary["api_error_rate"] == 0.5
+
+    history = core.summarize_monitoring_history(limit=10, bucket="day")
+    assert history["items"][0]["api_request_count"] == 2
+    assert history["items"][0]["api_error_rate"] == 0.5

@@ -16,16 +16,19 @@ how failures are inspected, and how model behavior is monitored after inference.
 - Input safety layer: upload validation, RGB normalization, image-size checks, and quality scoring
   for brightness, contrast, focus, and saturation.
 - XAI integration: Grad-CAM overlays returned by both the API and dashboard.
+- Provider-facing interpretation: prediction responses include decision basis, uncertainty level,
+  review action, quality context, clinician checks, and model limitations.
 - API-first deployment: FastAPI owns inference, validation, logging, monitoring, and reviewer
   feedback; the browser dashboard is a thin client over the same API.
 - Audit-style traceability: correlation IDs, request timing, model version, model hash, threshold,
   review reason, image hashes, and quality metrics.
-- Human-in-the-loop workflow: review queue and reviewer feedback records for retrospective failure
-  analysis.
+- Human-in-the-loop workflow: review queue, reviewer assignment, status, priority, feedback, and
+  traceable escalation records for retrospective failure analysis.
 - Robustness and failure analysis: synthetic corruption tests and false-positive/false-negative
   gallery.
-- MLOps literacy: CI/CD workflows, model registry, API contracts, Kubernetes manifests, drift
-  monitoring, retraining orchestration, optional experiment tracking, and load testing.
+- MLOps literacy: CI/CD workflows, model registry, API contracts, Kubernetes manifests, monitoring
+  history, drift monitoring, retraining orchestration, optional experiment tracking, and load
+  testing.
 
 ## Honest Scope
 

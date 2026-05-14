@@ -1,0 +1,27 @@
+{
+  "properties": {
+    "bucket": {
+      "title": "Bucket",
+      "type": "string"
+    },
+    "limit": {
+      "title": "Limit",
+      "type": "integer"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "bucket",
+    "limit",
+    "items"
+  ],
+  "title": "MonitoringHistoryResponse",
+  "type": "object"
+}
